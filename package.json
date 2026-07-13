@@ -1,0 +1,53 @@
+{
+  "name": "gym-management-platform",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "pnpm test:unit",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "pnpm db:test:deploy && turbo run test:integration",
+    "test:rls-spike": "node packages/database/rls-spike/run.mjs",
+    "test:ci": "pnpm test:unit && pnpm test:integration",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @gym-platform/database db:generate",
+    "db:format": "pnpm --filter @gym-platform/database db:format",
+    "db:validate": "pnpm --filter @gym-platform/database db:validate",
+    "db:migrate": "pnpm --filter @gym-platform/database db:migrate",
+    "db:deploy": "pnpm --filter @gym-platform/database db:deploy",
+    "db:test:deploy": "pnpm --filter @gym-platform/database db:test:deploy",
+    "db:studio": "pnpm --filter @gym-platform/database db:studio",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.7",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-config-next": "^15.5.20",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "unrs-resolver"
+    ]
+  }
+}

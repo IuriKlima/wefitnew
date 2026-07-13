@@ -1,0 +1,292 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationType {
+  PERSONAL
+  GYM
+  NETWORK
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  SUSPENDED
+  CANCELED
+  EXPIRED
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Organization {
+  id              String                     @id @default(uuid()) @db.Uuid
+  type            OrganizationType
+  legalName       String
+  tradeName       String?
+  slug            String                     @unique
+  timezone        String                     @default("America/Sao_Paulo")
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  deletedAt       DateTime?
+  units           Unit[]
+  memberships     Membership[]
+  roles           Role[]
+  membershipRoles MembershipRole[]
+  subscriptions   OrganizationSubscription[]
+  students        Student[]
+  studentUnits    StudentUnit[]
+  auditLogs       AuditLog[]
+
+  @@index([type])
+  @@index([deletedAt])
+}
+
+model Unit {
+  id              String           @id @default(uuid()) @db.Uuid
+  organizationId  String           @db.Uuid
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name            String
+  code            String?
+  timezone        String           @default("America/Sao_Paulo")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+  membershipRoles MembershipRole[]
+  studentUnits    StudentUnit[]
+  auditLogs       AuditLog[]
+
+  @@unique([organizationId, code])
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, deletedAt])
+}
+
+model User {
+  id              String       @id @default(uuid()) @db.Uuid
+  name            String
+  email           String       @unique
+  emailVerifiedAt DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  deletedAt       DateTime?
+  memberships     Membership[]
+  students        Student[]
+  auditLogs       AuditLog[]
+
+  @@index([deletedAt])
+}
+
+model Membership {
+  id              String           @id @default(uuid()) @db.Uuid
+  organizationId  String           @db.Uuid
+  userId          String           @db.Uuid
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status          MembershipStatus @default(ACTIVE)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+  membershipRoles MembershipRole[]
+
+  @@unique([organizationId, userId])
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([userId])
+}
+
+model Role {
+  id              String           @id @default(uuid()) @db.Uuid
+  organizationId  String           @db.Uuid
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  key             String
+  name            String
+  description     String?
+  isSystem        Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  membershipRoles MembershipRole[]
+  rolePermissions RolePermission[]
+
+  @@unique([organizationId, key])
+  @@unique([organizationId, id])
+  @@index([organizationId])
+}
+
+model Permission {
+  id              String           @id @default(uuid()) @db.Uuid
+  key             String           @unique
+  description     String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  rolePermissions RolePermission[]
+}
+
+model MembershipRole {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  membershipId   String       @db.Uuid
+  roleId         String       @db.Uuid
+  unitId         String?      @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  membership     Membership   @relation(fields: [organizationId, membershipId], references: [organizationId, id], onDelete: Cascade)
+  role           Role         @relation(fields: [organizationId, roleId], references: [organizationId, id], onDelete: Restrict)
+  unit           Unit?        @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([membershipId])
+  @@index([roleId])
+  @@index([unitId])
+  @@index([organizationId, membershipId])
+  @@index([organizationId, roleId])
+  @@index([organizationId, unitId])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid()) @db.Uuid
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model SubscriptionPlan {
+  id            String                     @id @default(uuid()) @db.Uuid
+  code          String                     @unique
+  name          String
+  description   String?
+  active        Boolean                    @default(true)
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+  planFeatures  PlanFeature[]
+  subscriptions OrganizationSubscription[]
+}
+
+model Feature {
+  id           String        @id @default(uuid()) @db.Uuid
+  key          String        @unique
+  name         String
+  description  String?
+  valueType    String        @default("boolean")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  planFeatures PlanFeature[]
+}
+
+model PlanFeature {
+  id         String           @id @default(uuid()) @db.Uuid
+  planId     String           @db.Uuid
+  featureId  String           @db.Uuid
+  plan       SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  feature    Feature          @relation(fields: [featureId], references: [id], onDelete: Restrict)
+  enabled    Boolean          @default(false)
+  limitValue Int?
+  config     Json?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([planId, featureId])
+  @@index([featureId])
+}
+
+model OrganizationSubscription {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  planId         String             @db.Uuid
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  plan           SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status         SubscriptionStatus
+  startsAt       DateTime
+  endsAt         DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([organizationId, status])
+  @@index([planId])
+}
+
+model Student {
+  id              String        @id @default(uuid()) @db.Uuid
+  organizationId  String        @db.Uuid
+  userId          String?       @db.Uuid
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name            String
+  socialName      String?
+  email           String?
+  phone           String?
+  birthDate       DateTime?     @db.Date
+  operationalNote String?       @db.VarChar(500)
+  status          StudentStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+  unitLinks       StudentUnit[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status, deletedAt])
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, name])
+  @@index([userId])
+}
+
+model StudentUnit {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  studentId      String       @db.Uuid
+  unitId         String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  student        Student      @relation(fields: [organizationId, studentId], references: [organizationId, id], onDelete: Cascade)
+  unit           Unit         @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@index([organizationId])
+  @@index([organizationId, studentId])
+  @@index([organizationId, unitId])
+  @@index([organizationId, deletedAt])
+}
+
+model AuditLog {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  unitId         String?      @db.Uuid
+  actorUserId    String?      @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  unit           Unit?        @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  actor          User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  action         String
+  entity         String
+  entityId       String?
+  metadata       Json?
+  correlationId  String?
+  occurredAt     DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, occurredAt])
+  @@index([organizationId, unitId])
+  @@index([unitId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([entity, entityId])
+}

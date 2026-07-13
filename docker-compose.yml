@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: gym-platform-postgres
+    environment:
+      POSTGRES_USER: gym_platform
+      POSTGRES_PASSWORD: gym_platform_dev_password
+      POSTGRES_DB: gym_platform_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - gym_platform_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gym_platform -d gym_platform_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postgres-test:
+    image: postgres:17-alpine
+    container_name: gym-platform-postgres-test
+    environment:
+      POSTGRES_USER: gym_platform
+      POSTGRES_PASSWORD: gym_platform_test_password
+      POSTGRES_DB: gym_platform_test
+    ports:
+      - "55432:5432"
+    volumes:
+      - gym_platform_postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gym_platform -d gym_platform_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    container_name: gym-platform-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - gym_platform_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  gym_platform_postgres_data:
+  gym_platform_postgres_test_data:
+  gym_platform_redis_data:

@@ -1,0 +1,39 @@
+{
+  "name": "@gym-platform/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/main.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm test:unit",
+    "test:unit": "vitest run test/unit src --environment node --testTimeout 30000",
+    "test:integration": "vitest run test/integration --environment node --testTimeout 30000"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^12.0.1",
+    "@fastify/rate-limit": "^10.2.1",
+    "@nestjs/common": "^11.0.5",
+    "@nestjs/core": "^11.0.5",
+    "@nestjs/platform-fastify": "^11.0.5",
+    "@nestjs/swagger": "^11.0.3",
+    "@prisma/client": "^6.2.1",
+    "@gym-platform/auth": "workspace:*",
+    "@gym-platform/config": "workspace:*",
+    "@gym-platform/contracts": "workspace:*",
+    "@gym-platform/database": "workspace:*",
+    "@gym-platform/observability": "workspace:*",
+    "@gym-platform/permissions": "workspace:*",
+    "@gym-platform/validation": "workspace:*",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.0.5"
+  }
+}

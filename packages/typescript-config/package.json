@@ -1,0 +1,10 @@
+{
+  "name": "@gym-platform/typescript-config",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "base.json",
+    "nest.json",
+    "next.json"
+  ]
+}

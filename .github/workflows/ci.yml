@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://gym_platform:gym_platform_test_password@localhost:55432/gym_platform_test?schema=public
+  DATABASE_URL_TEST: postgresql://gym_platform:gym_platform_test_password@localhost:55432/gym_platform_test?schema=public
+  REDIS_URL: redis://localhost:6379
+  CORS_ORIGINS: http://localhost:3000
+  SWAGGER_ENABLED: "false"
+  RATE_LIMIT_MAX: "1000"
+  AUTH_ADAPTER: temporary-header
+  ALLOW_TEST_DATABASE_RESET: "true"
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+
+    services:
+      postgres-test:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: gym_platform
+          POSTGRES_PASSWORD: gym_platform_test_password
+          POSTGRES_DB: gym_platform_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U gym_platform -d gym_platform_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Validate Prisma schema
+        run: pnpm db:validate
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+      - name: RLS Spike tests
+        run: pnpm test:rls-spike
