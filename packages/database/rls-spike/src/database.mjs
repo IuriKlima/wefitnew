@@ -169,12 +169,12 @@ export async function assertAdministrativeConnection(prisma, expectedDatabaseNam
   const [database] = await prisma.$queryRaw`
     SELECT
       pg_catalog.current_database() AS database_name,
-      pg_catalog.current_user AS role_name
+      current_user AS role_name
   `;
   const [attributes] = await prisma.$queryRaw`
     SELECT rolsuper, rolcreaterole
     FROM pg_catalog.pg_roles
-    WHERE rolname = pg_catalog.current_user
+    WHERE rolname = current_user
   `;
 
   if (database?.database_name !== expectedDatabaseName) {
@@ -266,10 +266,21 @@ async function setLocalRole(transaction, role) {
 }
 
 export function databaseErrorDetails(error) {
-  const meta = error && typeof error === "object" && "meta" in error ? error.meta : undefined;
-  const sqlState = meta && typeof meta === "object" && "code" in meta ? meta.code : undefined;
-  const databaseMessage =
+  let meta = error && typeof error === "object" && "meta" in error ? error.meta : undefined;
+  let sqlState = meta && typeof meta === "object" && "code" in meta ? meta.code : undefined;
+  let databaseMessage =
     meta && typeof meta === "object" && "message" in meta ? meta.message : undefined;
+
+  // Handle PrismaClientUnknownRequestError for deferred triggers
+  if (!sqlState && error && typeof error.message === "string") {
+    if (
+      error.message.includes("active student requires an active link") ||
+      error.message.includes("student organization does not match")
+    ) {
+      sqlState = "23514";
+      databaseMessage = error.message;
+    }
+  }
 
   return {
     prismaCode: error && typeof error === "object" && "code" in error ? error.code : undefined,

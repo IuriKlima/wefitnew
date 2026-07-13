@@ -44,6 +44,9 @@ export async function expectDatabaseError(action, expectedSqlStates) {
     await action();
   } catch (error) {
     const details = databaseErrorDetails(error);
+    if (!details.sqlState) {
+      console.error("DEBUG: Unexpected error object:", error);
+    }
     assert.ok(
       expectedSqlStates.includes(details.sqlState),
       `SQLSTATE esperado: ${expectedSqlStates.join(", ")}; recebido: ${String(details.sqlState)}.`

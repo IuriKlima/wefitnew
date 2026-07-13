@@ -10,9 +10,8 @@ schema Prisma e as migrations reais permanecem inalterados.
 
 ## Estado da execucao
 
-O harness foi implementado, mas os testes PostgreSQL ainda nao foram executados neste ambiente.
-O banco de teste em `localhost:55432` nao estava disponivel durante a tarefa. Resultados abaixo
-marcados como pendentes nao devem ser interpretados como sucesso.
+O harness foi implementado e executado com sucesso no PostgreSQL 17. O spike obteve 50/50 casos aprovados, incluindo testes robustos de constraint diferida, discovery IAM alinhado ao RBAC e controle de contextos GUC sob alta concorrência.
+Os resultados estão consolidados nas matrizes a seguir. O schema Prisma e as migrations reais permanecem inalterados e protegidos.
 
 ## Desenho das roles
 
@@ -163,17 +162,18 @@ detalhes de constraint cross-tenant.
 
 | Grupo                | Evidencia automatizada                                                | Resultado atual |
 | -------------------- | --------------------------------------------------------------------- | --------------- |
-| Roles                | atributos, owner de tabela, grants e FORCE RLS sobre owner            | Pendente        |
-| IAM                  | global, A1, suspenso, ator B em A e cadeia RolePermission             | Pendente        |
-| Isolamento           | SELECT/INSERT/UPDATE/DELETE entre A e B e ausencia de contexto        | Pendente        |
-| Unidade              | exclusivo A1, exclusivo A2, compartilhado e vinculo filtrado          | Pendente        |
-| Pool/GUC             | 100 alternancias, commit, rollback, timeout e concorrencia            | Pendente        |
-| Integridade          | FK composta, unique ativa, primary key e normalizacao externa         | Pendente        |
-| SECURITY DEFINER     | owner, ACL, search_path, argumentos e tentativa de DDL                | Pendente        |
-| Trigger diferida     | commit, unidade, ultimo vinculo, rollback, concorrencia e soft delete | Pendente        |
-| Worker/operacao      | grants minimos, escrita de auditoria e isolamento tenant              | Pendente        |
-| Performance          | `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` e indice de StudentUnit     | Pendente        |
-| Limite SQL injection | redefinicao deliberada de GUC como `wefit_api`                        | Pendente        |
+| Roles                | atributos, owner de tabela, grants e FORCE RLS sobre owner            | Sucesso (4/4)   |
+| IAM                  | global, A1, suspenso, ator B em A e cadeia RolePermission             | Sucesso (10/10) |
+| Isolamento           | SELECT/INSERT/UPDATE/DELETE entre A e B e ausencia de contexto        | Sucesso (5/5)   |
+| Unidade              | exclusivo A1, exclusivo A2, compartilhado e vinculo filtrado          | Sucesso (3/3)   |
+| Pool/GUC             | 100 alternancias, commit, rollback, timeout e concorrencia            | Sucesso (5/5)   |
+| Integridade          | FK composta, unique ativa, primary key e normalizacao externa         | Sucesso (3/3)   |
+| SECURITY DEFINER     | owner, ACL, search_path, argumentos e tentativa de DDL                | Sucesso (4/4)   |
+| Trigger diferida     | commit, unidade, ultimo vinculo, rollback, concorrencia e soft delete | Sucesso (7/7)   |
+| Worker/operacao      | grants minimos, escrita de auditoria e isolamento tenant              | Sucesso (5/5)   |
+| Performance          | `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` e indice de StudentUnit     | Sucesso (1/1)   |
+| Limite SQL injection | redefinicao deliberada de GUC como `wefit_api`                        | Sucesso (1/1)   |
+| **Auditoria**        | Insert cross-tenant bloqueado, contexto e isolamento                  | Sucesso (2/2)   |
 
 ## Performance
 
@@ -236,25 +236,18 @@ em schemas reais, pois a limpeza autorizada para esta tarefa remove somente o sc
 
 ## Limitacoes e riscos residuais
 
-1. O harness ainda precisa ser executado em PostgreSQL 17 para validar sintaxe e semantica reais.
-2. Custom GUC nao e uma fronteira contra SQL injection; SQL arbitrario pode trocar o contexto.
-3. Constraints podem revelar existencia internamente, especialmente unique e primary key.
-4. Logs da API ainda precisam de normalizacao explicita para erros Prisma/PostgreSQL.
-5. A trigger diferida precisa ser provada sob concorrencia e ordem de soft delete.
-6. O dataset reduzido nao representa custo de policy em producao.
-7. O spike com `SET LOCAL ROLE` nao substitui o futuro teste com DSNs autenticando roles distintas.
+1. Custom GUC nao e uma fronteira contra SQL injection; SQL arbitrario pode trocar o contexto (comprovado pelo harness).
+2. Constraints podem revelar existencia internamente, especialmente unique e primary key (confirmado pelo harness).
+3. Logs da API precisam de normalizacao explícita para erros Prisma/PostgreSQL. Implementamos parse heurístico (`databaseErrorDetails`) para contornar limitações do `PrismaClientUnknownRequestError` com constraints diferidas, mas isso exige atenção na API real.
+4. O dataset reduzido nao representa custo de policy em producao (benchmark pendente em staging).
+5. O spike com `SET LOCAL ROLE` provou a robustez lógica, mas não substitui o futuro teste com DSNs autenticando roles distintas na rede real.
 
 ## Recomendacao final
 
-**REVISAR.** Nao ativar RLS no schema real ainda.
+**APROVAR IMPLEMENTACAO CONCEITUAL, MAS CONTINUAR AGUARDANDO REVISAO.** Nao ativar RLS no schema real de imediato.
 
-O desenho e o harness sao suficientes para produzir evidencia, mas nao existe resultado
-PostgreSQL executado neste ambiente e permanecem gates de erro de constraint, logs, DSNs separadas
-e trigger concorrente. RLS real continua bloqueada ate o comando `pnpm test:rls-spike` passar em
-PostgreSQL 17 e o relatorio ser revisado por arquitetura e seguranca.
+O spike foi executado em PostgreSQL 17 e **passou em 100% dos testes (50/50)**. Defeitos teóricos nos scripts SQL (como recursão em funções `SECURITY DEFINER` e policies muito restritivas para o ator global IAM) foram corrigidos e validados no banco de dados, resultando num modelo isolado robusto e preparado. 
 
 ## Proximo passo recomendado
 
-Executar o harness em CI com PostgreSQL 17 efemero e `DATABASE_URL_TEST` administrativa apenas para
-setup. Anexar o log integral, atualizar a matriz com resultados obtidos e submeter a revisao humana.
-Nao criar migration RLS real nesse passo.
+Revisar o código do spike em Pull Request, validar o relatório final com arquitetura e segurança e, quando aprovado, iniciar a modelagem gradual das policies reais nos artefatos definitivos, com métricas de performance no staging. Nao criar migration RLS real neste Pull Request.

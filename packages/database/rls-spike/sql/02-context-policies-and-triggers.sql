@@ -184,9 +184,14 @@ SECURITY INVOKER
 SET search_path = pg_catalog, rls_spike
 AS $function$
   SELECT target_organization_id = rls_spike.current_organization_id()
-    AND target_user_id = rls_spike.current_actor_user_id()
-    AND target_status = 'ACTIVE'
-    AND target_deleted_at IS NULL
+    AND CASE
+      WHEN rls_spike.current_unit_id() IS NULL THEN
+        rls_spike.has_global_scope(target_organization_id)
+      ELSE
+        target_user_id = rls_spike.current_actor_user_id()
+        AND target_status = 'ACTIVE'
+        AND target_deleted_at IS NULL
+    END
 $function$;
 ALTER FUNCTION rls_spike.membership_access(uuid, uuid, text, timestamptz)
   OWNER TO wefit_migrator_spike_test;
@@ -203,19 +208,20 @@ SECURITY INVOKER
 SET search_path = pg_catalog, rls_spike
 AS $function$
   SELECT target_organization_id = rls_spike.current_organization_id()
-    AND EXISTS (
-      SELECT 1
-      FROM rls_spike.membership AS membership
-      WHERE membership.id = target_membership_id
-        AND membership.organization_id = target_organization_id
-        AND membership.user_id = rls_spike.current_actor_user_id()
-        AND membership.status = 'ACTIVE'
-        AND membership.deleted_at IS NULL
-    )
     AND CASE
-      WHEN rls_spike.current_unit_id() IS NULL
-        THEN target_unit_id IS NULL AND rls_spike.has_global_scope(target_organization_id)
-      ELSE (target_unit_id IS NULL OR target_unit_id = rls_spike.current_unit_id())
+      WHEN rls_spike.current_unit_id() IS NULL THEN
+        rls_spike.has_global_scope(target_organization_id)
+      ELSE
+        EXISTS (
+          SELECT 1
+          FROM rls_spike.membership AS membership
+          WHERE membership.id = target_membership_id
+            AND membership.organization_id = target_organization_id
+            AND membership.user_id = rls_spike.current_actor_user_id()
+            AND membership.status = 'ACTIVE'
+            AND membership.deleted_at IS NULL
+        )
+        AND (target_unit_id IS NULL OR target_unit_id = rls_spike.current_unit_id())
         AND rls_spike.can_access_unit(target_organization_id, rls_spike.current_unit_id())
     END
 $function$;
@@ -234,19 +240,20 @@ SECURITY INVOKER
 SET search_path = pg_catalog, rls_spike
 AS $function$
   SELECT target_organization_id = rls_spike.current_organization_id()
-    AND EXISTS (
-      SELECT 1
-      FROM rls_spike.membership AS membership
-      WHERE membership.id = target_membership_id
-        AND membership.organization_id = target_organization_id
-        AND membership.user_id = rls_spike.current_actor_user_id()
-        AND membership.status = 'ACTIVE'
-        AND membership.deleted_at IS NULL
-    )
     AND CASE
-      WHEN rls_spike.current_unit_id() IS NULL
-        THEN target_unit_id IS NULL AND rls_spike.has_global_scope(target_organization_id)
-      ELSE target_unit_id = rls_spike.current_unit_id()
+      WHEN rls_spike.current_unit_id() IS NULL THEN
+        rls_spike.has_global_scope(target_organization_id)
+      ELSE
+        EXISTS (
+          SELECT 1
+          FROM rls_spike.membership AS membership
+          WHERE membership.id = target_membership_id
+            AND membership.organization_id = target_organization_id
+            AND membership.user_id = rls_spike.current_actor_user_id()
+            AND membership.status = 'ACTIVE'
+            AND membership.deleted_at IS NULL
+        )
+        AND target_unit_id = rls_spike.current_unit_id()
         AND rls_spike.can_access_unit(target_organization_id, rls_spike.current_unit_id())
     END
 $function$;
@@ -326,7 +333,8 @@ TO
   wefit_worker_spike_test,
   wefit_ops_read_spike_test,
   wefit_ops_write_spike_test,
-  wefit_migrator_spike_test;
+  wefit_migrator_spike_test,
+  wefit_rls_owner_spike_test;
 -- statement-breakpoint
 CREATE POLICY organization_select ON rls_spike.organization FOR SELECT
   USING (rls_spike.tenant_access(id));
