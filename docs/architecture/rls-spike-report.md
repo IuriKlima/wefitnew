@@ -239,14 +239,20 @@ em schemas reais, pois a limpeza autorizada para esta tarefa remove somente o sc
 1. Custom GUC nao e uma fronteira contra SQL injection; SQL arbitrario pode trocar o contexto (comprovado pelo harness).
 2. Constraints podem revelar existencia internamente, especialmente unique e primary key (confirmado pelo harness).
 3. Logs da API precisam de normalizacao explícita para erros Prisma/PostgreSQL. Implementamos parse heurístico (`databaseErrorDetails`) para contornar limitações do `PrismaClientUnknownRequestError` com constraints diferidas, mas isso exige atenção na API real.
-4. O dataset reduzido nao representa custo de policy em producao (benchmark pendente em staging).
-5. O spike com `SET LOCAL ROLE` provou a robustez lógica, mas não substitui o futuro teste com DSNs autenticando roles distintas na rede real.
+4. O dataset reduzido nao representa custo de policy em producao.
+5. O spike usou `SET LOCAL ROLE` e provou a robustez lógica local.
 
 ## Recomendacao final
 
 **APROVAR IMPLEMENTACAO CONCEITUAL, MAS CONTINUAR AGUARDANDO REVISAO.** Nao ativar RLS no schema real de imediato.
 
-O spike foi executado em PostgreSQL 17 e **passou em 100% dos testes (50/50)**. Defeitos teóricos nos scripts SQL (como recursão em funções `SECURITY DEFINER` e policies muito restritivas para o ator global IAM) foram corrigidos e validados no banco de dados, resultando num modelo isolado robusto e preparado. 
+O spike foi executado em PostgreSQL 17 e **passou em 100% dos testes (50/50)**. Defeitos teóricos nos scripts SQL foram corrigidos e validados no banco de dados.
+
+Documentamos explicitamente que a aprovação deste spike **não substitui**:
+- O teste com DSNs reais separadas autenticando identidades distintas na rede;
+- O benchmark de performance em staging com dados volumosos;
+- A aplicação gradual e cautelosa das policies nas tabelas reais;
+- A revisão humana final de arquitetura e segurança.
 
 ## Proximo passo recomendado
 
