@@ -24,3 +24,5 @@ export class TemporaryHeaderAuthAdapter implements AuthAdapter {
     };
   }
 }
+
+export * from "./supabase.js";

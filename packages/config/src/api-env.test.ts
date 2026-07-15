@@ -48,6 +48,32 @@ describe("api env validation", () => {
     ).toThrow();
   });
 
+  it("rejects supabase-jwt adapter if SUPABASE_URL or SUPABASE_JWKS_URL are missing", () => {
+    expect(() =>
+      loadApiEnv({
+        NODE_ENV: "test",
+        AUTH_ADAPTER: "supabase-jwt",
+        DATABASE_URL: "postgresql://user:password@localhost:5432/app",
+        REDIS_URL: "redis://localhost:6379",
+        CORS_ORIGINS: "http://localhost:3000"
+      })
+    ).toThrow();
+  });
+
+  it("accepts supabase-jwt adapter if both Supabase configs are present", () => {
+    const env = loadApiEnv({
+      NODE_ENV: "test",
+      AUTH_ADAPTER: "supabase-jwt",
+      DATABASE_URL: "postgresql://user:password@localhost:5432/app",
+      REDIS_URL: "redis://localhost:6379",
+      CORS_ORIGINS: "http://localhost:3000",
+      SUPABASE_URL: "https://foo.supabase.co",
+      SUPABASE_JWKS_URL: "https://foo.supabase.co/auth/v1/.well-known/jwks.json"
+    });
+
+    expect(env.AUTH_ADAPTER).toBe("supabase-jwt");
+  });
+
   it("loads worker env without API-only variables", () => {
     expect(
       loadWorkerEnv({

@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 
-import { TemporaryHeaderAuthAdapter } from "@gym-platform/auth";
+import { SupabaseJwtAuthAdapter, TemporaryHeaderAuthAdapter } from "@gym-platform/auth";
 import { loadApiEnv } from "@gym-platform/config";
 
 import { AUTH_ADAPTER } from "../../common/auth/auth.constants.js";
@@ -13,11 +13,15 @@ import { IdentityService } from "./identity.service.js";
       useFactory: () => {
         const env = loadApiEnv();
 
-        if (env.AUTH_ADAPTER !== "temporary-header") {
-          throw new Error("Production authentication provider is not configured yet.");
+        if (env.AUTH_ADAPTER === "supabase-jwt") {
+          return new SupabaseJwtAuthAdapter(env.SUPABASE_JWKS_URL!);
         }
 
-        return new TemporaryHeaderAuthAdapter();
+        if (env.AUTH_ADAPTER === "temporary-header") {
+          return new TemporaryHeaderAuthAdapter();
+        }
+
+        throw new Error("Configured authentication adapter is not implemented.");
       }
     },
     IdentityService

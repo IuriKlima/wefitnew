@@ -18,5 +18,8 @@
     "test": "pnpm test:unit",
     "test:unit": "vitest run --passWithNoTests",
     "test:integration": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "jose": "^6.2.3"
   }
 }

@@ -25,11 +25,14 @@ export const apiEnvSchema = baseEnvSchema
     PORT: z.coerce.number().int().positive().default(3333),
     API_HOST: z.string().min(1).default("0.0.0.0"),
     DATABASE_URL: z.string().min(1),
+    DIRECT_URL: z.string().min(1).optional(),
     REDIS_URL: z.string().min(1),
     CORS_ORIGINS: z.string().min(1).default("http://localhost:3000"),
     SWAGGER_ENABLED: optionalBooleanFromString,
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
-    AUTH_ADAPTER: z.enum(["temporary-header", "external"]).default("temporary-header")
+    AUTH_ADAPTER: z.enum(["temporary-header", "external", "supabase-jwt"]).default("temporary-header"),
+    SUPABASE_URL: z.string().url().optional(),
+    SUPABASE_JWKS_URL: z.string().url().optional()
   })
   .transform((env) => ({
     ...env,
@@ -42,6 +45,23 @@ export const apiEnvSchema = baseEnvSchema
         path: ["AUTH_ADAPTER"],
         message: "Temporary authentication adapter cannot be used in production."
       });
+    }
+
+    if (env.AUTH_ADAPTER === "supabase-jwt") {
+      if (!env.SUPABASE_URL) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["SUPABASE_URL"],
+          message: "SUPABASE_URL is required when using supabase-jwt auth adapter."
+        });
+      }
+      if (!env.SUPABASE_JWKS_URL) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["SUPABASE_JWKS_URL"],
+          message: "SUPABASE_JWKS_URL is required when using supabase-jwt auth adapter."
+        });
+      }
     }
 
     if (parseCorsOrigins(env.CORS_ORIGINS).includes("*")) {
