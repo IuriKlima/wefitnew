@@ -750,6 +750,7 @@ describe("security and multi-tenancy integration", () => {
     });
     await prisma.rolePermission.create({
       data: {
+        organizationId,
         roleId: role.id,
         permissionId: permission.id
       }
@@ -791,6 +792,7 @@ describe("security and multi-tenancy integration", () => {
     });
     await prisma.rolePermission.create({
       data: {
+        organizationId,
         roleId: role.id,
         permissionId: permission.id
       }
@@ -843,9 +845,10 @@ describe("security and multi-tenancy integration", () => {
       }
     });
     await prisma.rolePermission.createMany({
-      data: permissions.map((permission) => ({
+      data: permissions.map((p) => ({
+        organizationId,
         roleId: role.id,
-        permissionId: permission.id
+        permissionId: p.id
       }))
     });
     const membership = await prisma.membership.create({

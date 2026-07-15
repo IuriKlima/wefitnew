@@ -46,6 +46,7 @@ model Organization {
   memberships     Membership[]
   roles           Role[]
   membershipRoles MembershipRole[]
+  rolePermissions RolePermission[]
   subscriptions   OrganizationSubscription[]
   students        Student[]
   studentUnits    StudentUnit[]
@@ -158,15 +159,19 @@ model MembershipRole {
 }
 
 model RolePermission {
-  id           String     @id @default(uuid()) @db.Uuid
-  roleId       String     @db.Uuid
-  permissionId String     @db.Uuid
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  roleId         String       @db.Uuid
+  permissionId   String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  role           Role         @relation(fields: [organizationId, roleId], references: [organizationId, id], onDelete: Cascade)
+  permission     Permission   @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([roleId, permissionId])
+  @@index([organizationId])
+  @@index([organizationId, roleId])
   @@index([permissionId])
 }
 
@@ -274,7 +279,7 @@ model AuditLog {
   unitId         String?      @db.Uuid
   actorUserId    String?      @db.Uuid
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  unit           Unit?        @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  unit           Unit?        @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
   actor          User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
   action         String
   entity         String

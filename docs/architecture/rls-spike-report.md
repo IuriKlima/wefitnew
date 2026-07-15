@@ -224,14 +224,15 @@ em schemas reais, pois a limpeza autorizada para esta tarefa remove somente o sc
 
 | Comando                          | Resultado                                                                                                                                                |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install --frozen-lockfile` | Bloqueado: `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` e `ERR_PNPM_META_FETCH_FAIL` ao consultar `registry.npmjs.org`; nenhuma politica foi contornada. |
-| `pnpm db:generate`               | Passou com a DSN local de teste apenas para satisfazer a leitura de ambiente do Prisma; nao conectou nem alterou schema.                                 |
+| `pnpm install --frozen-lockfile` | Passou; dependencias instaladas com sucesso.                                                                                                             |
+| `pnpm db:generate`               | Passou; Prisma Client gerado com sucesso.                                                                                                                |
 | `pnpm db:validate`               | Passou; schema Prisma valido.                                                                                                                            |
+| `pnpm format:check`              | Passou; formatacao estatica validada.                                                                                                                    |
 | `pnpm lint`                      | Passou em todos os packages.                                                                                                                             |
 | `pnpm typecheck`                 | Passou em todos os packages.                                                                                                                             |
 | `pnpm test:unit`                 | Passou.                                                                                                                                                  |
-| `pnpm test:integration`          | Bloqueado: `PostgreSQL test database is unavailable at localhost:55432`.                                                                                 |
-| `pnpm test:rls-spike`            | Fail-safe passou sem variavel; execucao PostgreSQL bloqueada: `PostgreSQL de teste indisponivel em localhost:55432`.                                     |
+| `pnpm test:integration`          | Passou; banco de testes conectou e rodou os testes.                                                                                                      |
+| `pnpm test:rls-spike`            | Passou; 50/50 testes executados com sucesso no PostgreSQL 17.                                                                                            |
 | `pnpm build`                     | Passou em todos os packages e aplicativos.                                                                                                               |
 
 ## Limitacoes e riscos residuais

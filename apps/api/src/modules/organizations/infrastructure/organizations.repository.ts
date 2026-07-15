@@ -86,6 +86,7 @@ export class OrganizationsRepository {
 
       await transaction.rolePermission.createMany({
         data: ownerPermissions.map((permission) => ({
+          organizationId: organization.id,
           roleId: ownerRole.id,
           permissionId: permission.id
         })),
