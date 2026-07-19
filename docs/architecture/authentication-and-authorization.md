@@ -2,11 +2,9 @@
 
 ## Autenticacao
 
-A fundacao contem um adapter temporario de autenticacao para desenvolvimento e testes. Ele le apenas o header `x-dev-user-id`, valida UUID e retorna o ator autenticado.
+O adapter principal valida JWTs emitidos pelo Supabase. O frontend envia o bearer token apenas pelo servidor, e a API deriva o ator exclusivamente do `sub` autenticado.
 
-O adapter temporario nao aceita identidade por email, roles, permissoes ou escopo por header. Permissoes sempre devem vir do banco por `Membership`, `Role`, `RolePermission` e `MembershipRole`.
-
-`AUTH_ADAPTER=temporary-header` e bloqueado quando `NODE_ENV=production`. O provedor definitivo de autenticacao deve ser decidido por ADR antes da implementacao real.
+O adapter `temporary-header` existe somente para desenvolvimento e testes locais. Ele le `x-dev-user-id`, valida UUID e e bloqueado quando `NODE_ENV=production`. Identidade, papeis, permissoes e escopo nunca podem ser aceitos por headers controlados pelo cliente.
 
 ## Autorizacao
 
@@ -24,27 +22,35 @@ Uma decisao de autorizacao deve considerar:
 
 ## Contexto de tenant
 
-Rotas sensiveis devem receber `organizationId` pela rota ou por header explicito validado. Quando houver `unitId`, a autorizacao deve validar o escopo de unidade e o banco deve impedir combinacoes cross-tenant.
+`GET /me/context` devolve somente organizacoes, papeis e unidades acessiveis ao ator autenticado. A funcao de banco usada nessa descoberta deriva o usuario do contexto da transacao, sem receber `userId`, `organizationId` ou `unitId` como parametros.
+
+O admin web guarda a selecao ativa em cookies de servidor `HttpOnly`, mas sempre a revalida contra `/me/context`. Uma organizacao ou unidade enviada pelo navegador e apenas uma candidata: o backend continua sendo a autoridade final e impede combinacoes cross-tenant.
+
+Rotas de negocio recebem `organizationId` pela rota e, quando aplicavel, `unitId` no contexto da requisicao. Ambas as informacoes devem ser validadas contra membership, papeis e permissoes do ator.
+
+## Separacao de privilegios no banco
+
+A leitura inicial de contexto usa uma funcao `SECURITY DEFINER` com `search_path` fixo. O papel proprietario da funcao tem `BYPASSRLS`, e o papel de runtime recebe somente `EXECUTE` por meio de um papel consumidor sem `BYPASSRLS`. O runtime da API nunca deve receber o papel proprietario nem privilegios amplos de leitura.
 
 ## Backend como autoridade
 
-O frontend pode esconder acoes indisponiveis, mas nunca deve ser a fonte final de autorizacao. Todas as operacoes sensiveis devem ser validadas no backend.
+O frontend pode esconder acoes indisponiveis, mas nunca deve ser a fonte final de autorizacao. Todas as operacoes sensiveis devem ser validadas no backend e devem receber `correlationId` para auditoria quando disponivel.
 
-## Admin web temporario
+## Admin web
 
-Enquanto a autenticacao final nao existe, `apps/admin-web` usa apenas variaveis de servidor para chamar a API:
+`apps/admin-web` usa apenas variaveis de servidor para chamar a API:
 
 - `ADMIN_API_BASE_URL`;
-- `ADMIN_ORGANIZATION_ID`;
-- `ADMIN_DEV_USER_ID`;
-- `ADMIN_AUTH_ADAPTER=temporary-header`.
+- configuracao publica e secreta do Supabase exigida pelo adapter;
+- `ADMIN_DEV_USER_ID` somente no desenvolvimento local com `ADMIN_AUTH_ADAPTER=temporary-header`.
 
-O header `x-dev-user-id` e montado exclusivamente em Server Components/Server Actions. Ele nao deve aparecer no browser, em variaveis `NEXT_PUBLIC` ou em codigo cliente. O adapter temporario tambem e bloqueado em producao.
+Nenhum identificador fixo de organizacao ou unidade e aceito em staging ou producao. Tokens e o header temporario sao montados exclusivamente em Server Components e Server Actions; eles nao devem aparecer em variaveis `NEXT_PUBLIC`, em codigo cliente ou em logs.
 
 ## Status atual
 
 - `GET /health` e `GET /health/live` sao publicos.
 - `GET /health/ready` e publico, mas valida PostgreSQL.
+- `GET /me/context` exige autenticacao e limita o retorno ao ator atual.
 - Criacao de organizacao exige usuario autenticado existente e cria papel owner padrao.
 - Rotas de unidade exigem permissoes `unit:read` ou `unit:manage`.
 - Rotas de alunos exigem permissoes `student:read` ou `student:manage`.

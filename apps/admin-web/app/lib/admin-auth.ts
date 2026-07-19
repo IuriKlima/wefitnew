@@ -39,7 +39,7 @@ export function readSafeNextPath(value: string | string[] | undefined): string {
     candidate.includes("\\") ||
     candidate.startsWith("/login")
   ) {
-    return "/students";
+    return "/";
   }
 
   return candidate;

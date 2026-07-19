@@ -1,4 +1,6 @@
 import type {
+  ActiveAccountContext,
+  CurrentAccountContext,
   ListStudentsInput,
   PaginatedStudents,
   Student,
@@ -6,6 +8,7 @@ import type {
   UnitSummary
 } from "@gym-platform/contracts";
 
+import { readActiveContextSelection, resolveActiveAccountContext } from "./active-context";
 import {
   readAdminAuthAdapter,
   requireSupabasePublicConfig,
@@ -13,16 +16,20 @@ import {
 } from "./admin-auth";
 import { createClient } from "./supabase/server";
 
-type AdminConfig = {
+type AdminTransportConfig = {
   authAdapter: AdminAuthAdapter;
   apiBaseUrl: string;
-  organizationId: string;
   devUserId?: string;
-  unitId?: string;
 };
 
 type AdminRequestOptions = {
+  activeContext?: ActiveAccountContext;
   includeUnitContext?: boolean;
+};
+
+export type AdminAccountState = {
+  context: CurrentAccountContext;
+  active: ActiveAccountContext | null;
 };
 
 export class AdminApiError extends Error {
@@ -34,8 +41,24 @@ export class AdminApiError extends Error {
   }
 }
 
+export async function getCurrentAccountContext(): Promise<CurrentAccountContext> {
+  return apiRequest<CurrentAccountContext>("/me/context");
+}
+
+export async function getAdminAccountState(): Promise<AdminAccountState> {
+  const [context, selection] = await Promise.all([
+    getCurrentAccountContext(),
+    readActiveContextSelection()
+  ]);
+
+  return {
+    context,
+    active: resolveActiveAccountContext(context, selection)
+  };
+}
+
 export async function listStudents(input: ListStudentsInput): Promise<PaginatedStudents> {
-  const config = readAdminConfig();
+  const active = await requireActiveContext();
   const params = new URLSearchParams();
 
   if (input.page) {
@@ -53,44 +76,38 @@ export async function listStudents(input: ListStudentsInput): Promise<PaginatedS
   const query = params.toString();
 
   return apiRequest<PaginatedStudents>(
-    config,
-    `/organizations/${config.organizationId}/students${query ? `?${query}` : ""}`
+    `/organizations/${active.organization.id}/students${query ? `?${query}` : ""}`,
+    {},
+    { activeContext: active }
   );
 }
 
 export async function getStudent(studentId: string): Promise<Student> {
-  const config = readAdminConfig();
+  const active = await requireActiveContext();
 
   return apiRequest<Student>(
-    config,
-    `/organizations/${config.organizationId}/students/${studentId}`,
+    `/organizations/${active.organization.id}/students/${studentId}`,
     {},
-    { includeUnitContext: false }
+    { activeContext: active }
   );
 }
 
 export async function listUnits(): Promise<UnitSummary[]> {
-  const config = readAdminConfig();
+  const active = await requireActiveContext();
 
-  return apiRequest<UnitSummary[]>(
-    config,
-    `/organizations/${config.organizationId}/units`,
-    {},
-    { includeUnitContext: false }
-  );
+  return active.organization.units.map(({ id, name, code }) => ({ id, name, code }));
 }
 
 export async function createStudent(payload: StudentPayload): Promise<Student> {
-  const config = readAdminConfig();
+  const active = await requireActiveContext();
 
   return apiRequest<Student>(
-    config,
-    `/organizations/${config.organizationId}/students`,
+    `/organizations/${active.organization.id}/students`,
     {
       method: "POST",
       body: JSON.stringify(payload)
     },
-    { includeUnitContext: false }
+    { activeContext: active, includeUnitContext: false }
   );
 }
 
@@ -98,16 +115,15 @@ export async function updateStudent(
   studentId: string,
   payload: Partial<StudentPayload>
 ): Promise<Student> {
-  const config = readAdminConfig();
+  const active = await requireActiveContext();
 
   return apiRequest<Student>(
-    config,
-    `/organizations/${config.organizationId}/students/${studentId}`,
+    `/organizations/${active.organization.id}/students/${studentId}`,
     {
       method: "PATCH",
       body: JSON.stringify(payload)
     },
-    { includeUnitContext: false }
+    { activeContext: active, includeUnitContext: false }
   );
 }
 
@@ -116,61 +132,58 @@ export async function inactivateStudent(studentId: string): Promise<Student> {
 }
 
 export async function archiveStudent(studentId: string): Promise<Student> {
-  const config = readAdminConfig();
+  const active = await requireActiveContext();
 
   return apiRequest<Student>(
-    config,
-    `/organizations/${config.organizationId}/students/${studentId}`,
-    {
-      method: "DELETE"
-    },
-    { includeUnitContext: false }
+    `/organizations/${active.organization.id}/students/${studentId}`,
+    { method: "DELETE" },
+    { activeContext: active, includeUnitContext: false }
   );
 }
 
-function readAdminConfig(): AdminConfig {
+async function requireActiveContext(): Promise<ActiveAccountContext> {
+  const { active } = await getAdminAccountState();
+
+  if (!active) {
+    throw new AdminApiError("Sua conta nao possui acesso ativo a uma organizacao.", 403);
+  }
+
+  return active;
+}
+
+function readAdminTransportConfig(): AdminTransportConfig {
   const authAdapter = readAdminAuthAdapter();
 
   if (authAdapter === "supabase-jwt") {
     requireSupabasePublicConfig();
   }
 
-  const apiBaseUrl = process.env.ADMIN_API_BASE_URL ?? "http://localhost:3333";
-  const organizationId = process.env.ADMIN_ORGANIZATION_ID;
-  const devUserId = process.env.ADMIN_DEV_USER_ID;
-  const unitId = process.env.ADMIN_UNIT_ID?.trim();
-
-  if (!organizationId || (authAdapter === "temporary-header" && !devUserId)) {
-    throw new AdminApiError(
-      authAdapter === "temporary-header"
-        ? "Configure ADMIN_ORGANIZATION_ID e ADMIN_DEV_USER_ID no servidor do admin."
-        : "Configure ADMIN_ORGANIZATION_ID no servidor do admin."
-    );
+  const devUserId = process.env.ADMIN_DEV_USER_ID?.trim();
+  if (authAdapter === "temporary-header" && !devUserId) {
+    throw new AdminApiError("Configure ADMIN_DEV_USER_ID apenas no ambiente local.");
   }
 
   return {
     authAdapter,
-    apiBaseUrl,
-    organizationId,
-    ...(devUserId ? { devUserId } : {}),
-    ...(unitId ? { unitId } : {})
+    apiBaseUrl: process.env.ADMIN_API_BASE_URL ?? "http://localhost:3333",
+    ...(devUserId ? { devUserId } : {})
   };
 }
 
 async function apiRequest<T>(
-  config: AdminConfig,
   path: string,
   init: RequestInit = {},
   options: AdminRequestOptions = {}
 ): Promise<T> {
+  const config = readAdminTransportConfig();
   const response = await fetch(`${config.apiBaseUrl}${path}`, {
     ...init,
     cache: "no-store",
     headers: {
       "content-type": "application/json",
       ...(await readAuthHeaders(config)),
-      ...(config.unitId && options.includeUnitContext !== false
-        ? { "x-unit-id": config.unitId }
+      ...(options.activeContext?.unit && options.includeUnitContext !== false
+        ? { "x-unit-id": options.activeContext.unit.id }
         : {}),
       ...init.headers
     }
@@ -187,7 +200,7 @@ async function apiRequest<T>(
   return (await response.json()) as T;
 }
 
-async function readAuthHeaders(config: AdminConfig): Promise<Record<string, string>> {
+async function readAuthHeaders(config: AdminTransportConfig): Promise<Record<string, string>> {
   if (config.authAdapter === "temporary-header") {
     return { "x-dev-user-id": config.devUserId! };
   }
@@ -197,7 +210,7 @@ async function readAuthHeaders(config: AdminConfig): Promise<Record<string, stri
   } = await (await createClient()).auth.getSession();
 
   if (!session?.access_token) {
-    throw new AdminApiError("Sua sessão expirou. Entre novamente para continuar.", 401);
+    throw new AdminApiError("Sua sessao expirou. Entre novamente para continuar.", 401);
   }
 
   return { authorization: `Bearer ${session.access_token}` };

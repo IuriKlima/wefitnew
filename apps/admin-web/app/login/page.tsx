@@ -14,7 +14,7 @@ type LoginPageProps = {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   if (readAdminAuthAdapter() === "temporary-header") {
-    redirect("/students");
+    redirect("/");
   }
 
   requireSupabasePublicConfig();
@@ -23,7 +23,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   } = await (await createClient()).auth.getUser();
 
   if (user) {
-    redirect("/students");
+    redirect("/");
   }
 
   const nextPath = readSafeNextPath((await searchParams).next);

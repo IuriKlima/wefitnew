@@ -222,18 +222,18 @@ em schemas reais, pois a limpeza autorizada para esta tarefa remove somente o sc
 
 ## Validacoes do monorepo
 
-| Comando                          | Resultado                                                                                                                                                |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install --frozen-lockfile` | Passou; dependencias instaladas com sucesso.                                                                                                             |
-| `pnpm db:generate`               | Passou; Prisma Client gerado com sucesso.                                                                                                                |
-| `pnpm db:validate`               | Passou; schema Prisma valido.                                                                                                                            |
-| `pnpm format:check`              | Passou; formatacao estatica validada.                                                                                                                    |
-| `pnpm lint`                      | Passou em todos os packages.                                                                                                                             |
-| `pnpm typecheck`                 | Passou em todos os packages.                                                                                                                             |
-| `pnpm test:unit`                 | Passou.                                                                                                                                                  |
-| `pnpm test:integration`          | Passou; banco de testes conectou e rodou os testes.                                                                                                      |
-| `pnpm test:rls-spike`            | Passou; 50/50 testes executados com sucesso no PostgreSQL 17.                                                                                            |
-| `pnpm build`                     | Passou em todos os packages e aplicativos.                                                                                                               |
+| Comando                          | Resultado                                                     |
+| -------------------------------- | ------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | Passou; dependencias instaladas com sucesso.                  |
+| `pnpm db:generate`               | Passou; Prisma Client gerado com sucesso.                     |
+| `pnpm db:validate`               | Passou; schema Prisma valido.                                 |
+| `pnpm format:check`              | Passou; formatacao estatica validada.                         |
+| `pnpm lint`                      | Passou em todos os packages.                                  |
+| `pnpm typecheck`                 | Passou em todos os packages.                                  |
+| `pnpm test:unit`                 | Passou.                                                       |
+| `pnpm test:integration`          | Passou; banco de testes conectou e rodou os testes.           |
+| `pnpm test:rls-spike`            | Passou; 50/50 testes executados com sucesso no PostgreSQL 17. |
+| `pnpm build`                     | Passou em todos os packages e aplicativos.                    |
 
 ## Limitacoes e riscos residuais
 
@@ -250,6 +250,7 @@ em schemas reais, pois a limpeza autorizada para esta tarefa remove somente o sc
 O spike foi executado em PostgreSQL 17 e **passou em 100% dos testes (50/50)**. Defeitos teóricos nos scripts SQL foram corrigidos e validados no banco de dados.
 
 Documentamos explicitamente que a aprovação deste spike **não substitui**:
+
 - O teste com DSNs reais separadas autenticando identidades distintas na rede;
 - O benchmark de performance em staging com dados volumosos;
 - A aplicação gradual e cautelosa das policies nas tabelas reais;

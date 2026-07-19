@@ -3,7 +3,8 @@
 ## Fase 0: Hardening da fundacao
 
 - Namespace tecnico `@gym-platform/*`.
-- Auth temporaria segura por `x-dev-user-id`.
+- Autenticacao Supabase JWT, com adapter temporario restrito ao desenvolvimento local.
+- Descoberta autenticada de contexto multi-academia.
 - Guards globais de autenticacao e autorizacao.
 - Health live/ready.
 - Constraints multi-tenant criticas.

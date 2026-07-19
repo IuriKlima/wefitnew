@@ -13,6 +13,8 @@ export interface TenantContext {
   correlationId?: string;
 }
 
+export type ActorDatabaseContext = Pick<TenantContext, "actorUserId" | "correlationId">;
+
 export type TenantPermissionScope = "organization" | "contextual";
 
 export interface AuthorizedTenantContext extends TenantContext {
@@ -82,7 +84,22 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
     }
   ): Promise<T> {
     return this.$transaction(async (tx) => {
-      await setTenantContext(tx, context);
+      await setDatabaseContext(tx, context);
+      return fn(tx);
+    }, options);
+  }
+
+  async withActorContext<T>(
+    context: ActorDatabaseContext,
+    fn: (tx: Prisma.TransactionClient) => Promise<T>,
+    options?: {
+      maxWait?: number;
+      timeout?: number;
+      isolationLevel?: Prisma.TransactionIsolationLevel;
+    }
+  ): Promise<T> {
+    return this.$transaction(async (tx) => {
+      await setDatabaseContext(tx, context);
       return fn(tx);
     }, options);
   }
@@ -114,7 +131,7 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
     };
 
     return this.$transaction(async (tx) => {
-      await setTenantContext(tx, effectiveContext);
+      await setDatabaseContext(tx, effectiveContext);
 
       const allowed = await hasTenantPermission(tx, {
         actorUserId: context.actorUserId!,
@@ -160,13 +177,13 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
   }
 }
 
-async function setTenantContext(
+async function setDatabaseContext(
   tx: Prisma.TransactionClient,
-  context: TenantContext
+  context: ActorDatabaseContext & Partial<Pick<TenantContext, "organizationId" | "unitId">>
 ): Promise<void> {
   await tx.$executeRaw`
     SELECT
-      set_config('app.organization_id', ${context.organizationId}, true),
+      set_config('app.organization_id', ${context.organizationId || ""}, true),
       set_config('app.unit_id', ${context.unitId || ""}, true),
       set_config('app.actor_user_id', ${context.actorUserId || ""}, true),
       set_config('app.correlation_id', ${context.correlationId || ""}, true)

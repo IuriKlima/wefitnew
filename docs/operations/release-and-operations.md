@@ -37,7 +37,13 @@ Forneca as variaveis por um gerenciador de segredos ou injecao protegida da plat
 | `SUPABASE_URL`, `SUPABASE_JWKS_URL`                                | API           | Obrigatorias com `AUTH_ADAPTER=supabase-jwt`; JWKS deve ser acessivel pela rede de runtime.                      |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Painel        | Valores publicos do cliente Supabase, revisados para o ambiente correto.                                         |
 
-Use ainda `SWAGGER_ENABLED=false`, `NODE_ENV=production`, `AUTH_ADAPTER=supabase-jwt`, `ORGANIZATION_SELF_SERVICE_ENABLED=false` e um `RATE_LIMIT_MAX` dimensionado. Nao disponibilize `x-dev-user-id` nem `temporary-header` em producao. O onboarding permanece fechado ate o fluxo de bootstrap possuir policy RLS e testes proprios.
+Use ainda `SWAGGER_ENABLED=false`, `NODE_ENV=production`, `AUTH_ADAPTER=supabase-jwt`, `ADMIN_AUTH_ADAPTER=supabase-jwt`, `ORGANIZATION_SELF_SERVICE_ENABLED=false` e um `RATE_LIMIT_MAX` dimensionado. Nao disponibilize `x-dev-user-id`, `temporary-header`, `ADMIN_ORGANIZATION_ID` ou `ADMIN_UNIT_ID` em staging/producao. O onboarding permanece fechado e manual.
+
+## Contexto multiacademia
+
+`GET /me/context` e a unica fonte de organizacoes, unidades e papeis usada pelo painel. O endpoint deriva o ator do JWT, nao recebe identificadores de escopo e retorna somente memberships ativas e nao arquivadas. A selecao ativa fica em cookies HTTP-only e e revalidada contra esse endpoint antes de montar rotas ou `x-unit-id`.
+
+A migration `20260718173000_add_actor_context_reader` cria uma funcao privilegiada estreita. Antes de subir a API, conceda a role real de runtime somente a membership `wefit_context_consumer`. Nunca conceda `wefit_context_reader` ao runtime. A inicializacao da API deve confirmar zero para superuser, `BYPASSRLS`, heranca elevada e ownership de tabelas de negocio.
 
 ## Sequencia de release
 
@@ -48,10 +54,10 @@ $env:RELEASE_ENV = "staging"
 node scripts/validate-release-config.mjs
 ```
 
-O validador falha para adaptadores temporarios, Swagger, onboarding self-service, origem CORS insegura, URLs locais, PostgreSQL sem TLS, Redis sem TLS/credenciais, Supabase/JWKS inconsistentes, tenant administrativo invalido e configuracao incompleta. A saida cita somente nomes de variaveis e regras, nunca valores.
+O validador falha para adaptadores temporarios, contexto administrativo fixo, Swagger, onboarding self-service, origem CORS insegura, URLs locais, PostgreSQL sem TLS, Redis sem TLS/credenciais, Supabase/JWKS inconsistentes e configuracao incompleta. A saida cita somente nomes de variaveis e regras, nunca valores.
 
 2. Executar todos os gates de CI e publicar imagens com tag imutavel, preferencialmente o SHA do commit.
-3. Validar em staging a configuracao de secrets, CORS, login real, RLS/credenciais de runtime e migrations.
+3. Validar em staging a configuracao de secrets, CORS, login real, RLS/credenciais de runtime e migrations. Use duas organizacoes reais de teste e um usuario limitado a uma unica unidade; confirme que `/me/context`, cookies adulterados e URLs abertas nao ampliam o escopo.
 4. Executar `pnpm db:deploy` com a identidade de migracao separada e registrar versao, horario e responsavel. Nunca execute `prisma migrate dev` em staging ou producao.
 5. Criar o usuario no Supabase e provisionar o primeiro tenant conforme [Provisionamento do beta fechado](./closed-beta-provisioning.md).
 6. Subir API e esperar `GET /health/ready` retornar 200; depois subir painel e workers.
@@ -95,7 +101,9 @@ Antes do beta, configure alertas para indisponibilidade, erro 5xx, latencia, sat
 ## Lacunas que impedem producao aberta
 
 - A jornada Bearer esta implementada, mas ainda precisa ser validada em staging contra um projeto Supabase real e usuarios previamente provisionados.
-- A fronteira transacional tenant-aware cobre unidades e alunos; onboarding self-service permanece fechado, e papeis/grants ainda precisam de validacao com a credencial real de runtime sem bypass.
+- A migration da funcao `/me/context` nao foi aplicada nesta tarefa. A funcao, `wefit_context_consumer` e os grants precisam ser validados com a role real do staging.
+- Os testes RLS locais sao evidencia parcial e nao substituem o teste de duas organizacoes e um usuario unit-scoped com a role real de runtime.
+- A fronteira transacional tenant-aware cobre contexto, unidades e alunos; onboarding self-service permanece fechado e manual.
 - Faltam metricas/tracing exportaveis, alertas e um runbook de incidente completo.
 - A decisao de provedor, dominio, TLS, WAF, backup, retencao e suporte operacional continua externa e obrigatoria antes de producao aberta.
 

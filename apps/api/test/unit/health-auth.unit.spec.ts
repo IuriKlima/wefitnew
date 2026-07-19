@@ -44,6 +44,27 @@ describe("public health and authentication guard", () => {
     expect(response.statusCode).toBe(401);
   });
 
+  it("returns 401 without authentication on the account context endpoint", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/me/context"
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("returns 401 for an invalid temporary actor on the account context endpoint", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/me/context",
+      headers: {
+        "x-dev-user-id": "not-a-uuid"
+      }
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
   it("replaces invalid incoming correlation IDs", async () => {
     const response = await app.inject({
       method: "GET",

@@ -39,4 +39,6 @@ Registre versao do release, operador, horario, ambiente, UUID da organizacao e r
 3. Execute os smokes externo e autenticado.
 4. Verifique o evento `organization.provisioned` na auditoria.
 
+Depois de criar memberships de beta, confirme que o painel as descobre por `/me/context`. Nenhum identificador de tenant deve ser configurado estaticamente no painel.
+
 O mecanismo e deliberadamente limitado ao beta fechado. Antes de onboarding aberto, substitua-o por um fluxo de bootstrap aprovado, com politica RLS e testes de integracao dedicados.

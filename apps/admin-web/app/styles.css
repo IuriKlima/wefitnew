@@ -99,6 +99,47 @@ textarea {
   justify-content: space-between;
 }
 
+.context-controls,
+.account-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.context-controls form {
+  align-items: flex-end;
+  display: flex;
+  gap: 8px;
+}
+
+.context-controls label {
+  min-width: 180px;
+}
+
+.context-controls label span {
+  font-size: 0.72rem;
+}
+
+.context-controls select {
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+.context-empty {
+  display: grid;
+  gap: 2px;
+}
+
+.context-empty strong {
+  color: var(--danger);
+}
+
+.context-empty span,
+.account-actions > span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .topbar-kicker,
 .eyebrow {
   color: var(--primary);
@@ -158,12 +199,45 @@ p {
   box-shadow: var(--shadow);
 }
 
+.dashboard-hero,
+.dashboard-shortcuts {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 12px;
+  padding: 28px;
+}
+
+.dashboard-shortcuts {
+  grid-template-columns: minmax(180px, 0.5fr) minmax(260px, 1fr);
+}
+
+.shortcut-card {
+  background: var(--primary-soft);
+  border: 1px solid #bddfd9;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+}
+
+.shortcut-card:hover {
+  border-color: var(--primary);
+}
+
+.shortcut-card span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .toolbar {
   padding: 16px;
 }
 
 .filters {
-  align-items: end;
+  align-items: flex-end;
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) auto;
@@ -496,7 +570,27 @@ td span {
   }
 
   .topbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
     padding: 14px 18px;
+  }
+
+  .context-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .context-controls form {
+    align-items: flex-end;
+  }
+
+  .context-controls label {
+    flex: 1;
+  }
+
+  .account-actions {
+    justify-content: space-between;
   }
 
   .content {
@@ -504,6 +598,7 @@ td span {
   }
 
   .filters,
+  .dashboard-shortcuts,
   .form-grid,
   .lifecycle-action,
   .profile-summary {
@@ -523,6 +618,12 @@ td span {
   }
 
   .form-actions {
+    flex-direction: column;
+  }
+
+  .context-controls form,
+  .account-actions {
+    align-items: stretch;
     flex-direction: column;
   }
 

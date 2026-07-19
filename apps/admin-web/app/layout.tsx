@@ -2,16 +2,28 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { ContextSelector } from "./context/context-selector";
+import { AdminApiError, getAdminAccountState } from "./lib/admin-api";
 import { readAdminAuthAdapter } from "./lib/admin-auth";
 import { logoutAction } from "./logout/actions";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "Gym Management Platform",
-  description: "Fundacao do SaaS multi-tenant para academias"
+  title: "Wefit",
+  description: "Gestao multiacademia"
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const accountState = await readOptionalAccountState();
+
+  if (!accountState) {
+    return (
+      <html lang="pt-BR">
+        <body>{children}</body>
+      </html>
+    );
+  }
+
   const usesSupabaseAuth = readAdminAuthAdapter() === "supabase-jwt";
 
   return (
@@ -19,26 +31,27 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <div className="admin-shell">
           <aside className="sidebar" aria-label="Navegacao principal">
-            <Link className="brand" href="/students">
-              Gym Platform
+            <Link className="brand" href="/">
+              Wefit
             </Link>
             <nav className="nav-list">
-              <Link href="/students">Alunos</Link>
+              <Link href="/">Inicio</Link>
+              {accountState.active ? <Link href="/students">Alunos</Link> : null}
             </nav>
           </aside>
           <div className="workspace">
             <header className="topbar">
-              <div>
-                <span className="topbar-kicker">Administrativo</span>
-                <strong>Gestao operacional</strong>
+              <ContextSelector state={accountState} />
+              <div className="account-actions">
+                <span>{accountState.context.user.name ?? "Conta sem perfil"}</span>
+                {usesSupabaseAuth ? (
+                  <form action={logoutAction}>
+                    <button className="button button-small" type="submit">
+                      Sair
+                    </button>
+                  </form>
+                ) : null}
               </div>
-              {usesSupabaseAuth ? (
-                <form action={logoutAction}>
-                  <button className="button button-small" type="submit">
-                    Sair
-                  </button>
-                </form>
-              ) : null}
             </header>
             {children}
           </div>
@@ -46,4 +59,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </body>
     </html>
   );
+}
+
+async function readOptionalAccountState() {
+  try {
+    return await getAdminAccountState();
+  } catch (error) {
+    if (error instanceof AdminApiError && error.statusCode === 401) {
+      return null;
+    }
+
+    throw error;
+  }
 }

@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 
 const allowedLogLevels = new Set(["trace", "debug", "info", "warn", "error"]);
 const allowedDatabaseSslModes = new Set(["require", "verify-ca", "verify-full"]);
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function readValue(env, name) {
   const value = env[name];
@@ -104,6 +103,14 @@ export function validateReleaseConfig(env = process.env) {
     errors.push("ADMIN_DEV_USER_ID must not be configured for a release deployment.");
   }
 
+  for (const legacyTenantVariable of ["ADMIN_ORGANIZATION_ID", "ADMIN_UNIT_ID"]) {
+    if (readValue(env, legacyTenantVariable)) {
+      errors.push(
+        `${legacyTenantVariable} must not be configured; release context comes from /me/context.`
+      );
+    }
+  }
+
   const rateLimitMax = Number(readValue(env, "RATE_LIMIT_MAX"));
   if (!Number.isSafeInteger(rateLimitMax) || rateLimitMax <= 0) {
     errors.push("RATE_LIMIT_MAX must be a positive integer.");
@@ -144,16 +151,6 @@ export function validateReleaseConfig(env = process.env) {
 
   if (!readValue(env, "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")) {
     errors.push("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is required.");
-  }
-
-  const adminOrganizationId = readValue(env, "ADMIN_ORGANIZATION_ID");
-  if (!uuidPattern.test(adminOrganizationId)) {
-    errors.push("ADMIN_ORGANIZATION_ID must be a UUID.");
-  }
-
-  const adminUnitId = readValue(env, "ADMIN_UNIT_ID");
-  if (adminUnitId && !uuidPattern.test(adminUnitId)) {
-    errors.push("ADMIN_UNIT_ID must be a UUID when configured.");
   }
 
   if (supabaseUrl && publicSupabaseUrl && supabaseUrl.origin !== publicSupabaseUrl.origin) {

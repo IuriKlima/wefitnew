@@ -8,7 +8,9 @@
 - [ ] `RELEASE_ENV=staging node scripts/validate-release-config.mjs` passou com as variaveis injetadas pela plataforma, sem expor valores em log.
 - [ ] Staging executou smoke e a jornada autenticada de aluno/unidade sem vazamento entre tenants.
 - [ ] Credenciais de runtime, migration e operacao sao distintas, com menor privilegio e sem `BYPASSRLS` para runtime.
+- [ ] Role da API e membro de `wefit_context_consumer`, nao e membro de `wefit_context_reader` e executa `/me/context` com a credencial real.
 - [ ] `temporary-header` e onboarding self-service nao estao habilitados; Swagger esta desligado; CORS contem somente origens HTTPS esperadas.
+- [ ] `ADMIN_ORGANIZATION_ID` e `ADMIN_UNIT_ID` nao existem no ambiente de release.
 - [ ] Backup recente confirmado e restore testado dentro do RTO acordado.
 - [ ] Dashboard e alertas de API, banco, Redis, workers e filas ativos; responsavel de incidente de plantao definido.
 
@@ -20,6 +22,7 @@
 - [ ] Subir painel e workers; verificar healthchecks dos tres containers.
 - [ ] Executar `pnpm smoke:release` contra URLs externas de API e painel.
 - [ ] Executar `pnpm smoke:authenticated` com token curto; incluir um tenant proibido quando houver um segundo tenant de teste.
+- [ ] Validar `/me/context` com duas organizacoes e um usuario restrito a uma unidade; adulterar cookies/URLs e confirmar negacao sem vazamento.
 - [ ] Validar login real, autorizacao por organizacao/unidade, criacao/edicao/inativacao de aluno e registro de auditoria.
 
 ## Depois da mudanca

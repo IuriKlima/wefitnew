@@ -73,7 +73,7 @@ function registerRoleAndCatalogTests(registry, prisma) {
     assert.equal(roleRows.length, 6);
     for (const role of roleRows) {
       assert.equal(role.rolsuper, false);
-      if (role.rolname === 'wefit_rls_owner_spike_test') {
+      if (role.rolname === "wefit_rls_owner_spike_test") {
         assert.equal(role.rolbypassrls, true);
       } else {
         assert.equal(role.rolbypassrls, false);
@@ -297,21 +297,17 @@ function registerMembershipRoleTests(registry, prisma) {
     }
   );
 
-  registry.test(
-    "membership_role",
-    "usuario A1 consulta apenas seu grafo permitido",
-    async () => {
-      await withRoleTransaction(prisma, roles.api, contexts.scopedA1, async (transaction) => {
-        const rolesFound = await transaction.$queryRaw`
+  registry.test("membership_role", "usuario A1 consulta apenas seu grafo permitido", async () => {
+    await withRoleTransaction(prisma, roles.api, contexts.scopedA1, async (transaction) => {
+      const rolesFound = await transaction.$queryRaw`
           SELECT role_id FROM rls_spike.membership_role
         `;
-        assert.deepEqual(
-          rolesFound.map((r) => r.role_id),
-          [ids.roleScopedA1]
-        );
-      });
-    }
-  );
+      assert.deepEqual(
+        rolesFound.map((r) => r.role_id),
+        [ids.roleScopedA1]
+      );
+    });
+  });
 
   registry.test(
     "membership_role",
@@ -335,7 +331,10 @@ function registerMembershipRoleTests(registry, prisma) {
         const students = await transaction.$queryRaw`
           SELECT id FROM rls_spike.student ORDER BY id
         `;
-        assert.equal(students.some((s) => s.id === ids.studentA2), false);
+        assert.equal(
+          students.some((s) => s.id === ids.studentA2),
+          false
+        );
       });
     }
   );
@@ -819,7 +818,12 @@ function registerSecurityDefinerTests(registry, prisma) {
         assert.equal(functionDefinition.owner_can_login, false);
         assert.deepEqual(functionDefinition.proconfig, ["search_path=pg_catalog, rls_spike"]);
         // PUBLIC execution privilege is represented by an empty grantee (e.g. {=X/...} or ,=X/...)
-        assert.equal(/(^|{)[^=]*=X\//.test(functionDefinition.acl) && functionDefinition.acl.includes("{=X/") || functionDefinition.acl.includes(",=X/"), false);
+        assert.equal(
+          (/(^|{)[^=]*=X\//.test(functionDefinition.acl) &&
+            functionDefinition.acl.includes("{=X/")) ||
+            functionDefinition.acl.includes(",=X/"),
+          false
+        );
         assert.equal(/\bEXECUTE\b/i.test(functionDefinition.prosrc), false);
       }
     }

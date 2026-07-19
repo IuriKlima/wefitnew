@@ -26,9 +26,9 @@ describe("admin authentication configuration", () => {
 
   it("evita redirecionamentos externos após o login", () => {
     expect(readSafeNextPath("/students?page=2")).toBe("/students?page=2");
-    expect(readSafeNextPath("https://example.com")).toBe("/students");
-    expect(readSafeNextPath("//example.com")).toBe("/students");
-    expect(readSafeNextPath("/\\example.com")).toBe("/students");
-    expect(readSafeNextPath("/login?next=/login")).toBe("/students");
+    expect(readSafeNextPath("https://example.com")).toBe("/");
+    expect(readSafeNextPath("//example.com")).toBe("/");
+    expect(readSafeNextPath("/\\example.com")).toBe("/");
+    expect(readSafeNextPath("/login?next=/login")).toBe("/");
   });
 });
