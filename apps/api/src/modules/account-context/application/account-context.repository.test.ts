@@ -36,6 +36,22 @@ describe("current account context mapping", () => {
     expect(context.organizations.map(({ id }) => id)).toEqual([organizationAId]);
   });
 
+  it("does not expose an organization without a valid role", () => {
+    const context = buildCurrentAccountContext(actorUserId, [
+      row({ organizationId: organizationAId, roleKey: null, roleName: null, unitId: unitAId })
+    ]);
+
+    expect(context.organizations).toEqual([]);
+  });
+
+  it("does not expose an organization when a unit role has no active assigned unit", () => {
+    const context = buildCurrentAccountContext(actorUserId, [
+      row({ organizationId: organizationAId, roleUnitId: unitAId, unitId: null, unitName: null })
+    ]);
+
+    expect(context.organizations).toEqual([]);
+  });
+
   it("limits a unit-scoped role to its assigned active unit", () => {
     const context = buildCurrentAccountContext(actorUserId, [
       row({ organizationId: organizationAId, roleUnitId: unitAId, unitId: unitAId }),

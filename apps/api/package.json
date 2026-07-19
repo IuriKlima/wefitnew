@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm test:unit",
     "test:unit": "vitest run test/unit src --environment node --testTimeout 30000",
-    "test:integration": "vitest run test/integration --environment node --testTimeout 30000"
+    "test:integration": "vitest run test/integration --environment node --testTimeout 30000 --no-file-parallelism"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",

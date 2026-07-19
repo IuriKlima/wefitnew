@@ -204,12 +204,34 @@ async function hasTenantPermission(
       userId: input.actorUserId,
       organizationId: input.organizationId,
       status: "ACTIVE",
-      deletedAt: null
+      deletedAt: null,
+      user: {
+        is: { deletedAt: null }
+      },
+      organization: {
+        is: { deletedAt: null }
+      }
     },
     include: {
       membershipRoles: {
         where: {
-          organizationId: input.organizationId
+          organizationId: input.organizationId,
+          ...(input.unitId
+            ? {
+                OR: [
+                  { unitId: null },
+                  {
+                    unitId: input.unitId,
+                    unit: {
+                      is: {
+                        organizationId: input.organizationId,
+                        deletedAt: null
+                      }
+                    }
+                  }
+                ]
+              }
+            : { unitId: null })
         },
         include: {
           role: {

@@ -14,6 +14,7 @@ describe("api env validation", () => {
     expect(env.PORT).toBe(3333);
     expect(env.SWAGGER_ENABLED).toBe(true);
     expect(env.AUTH_ADAPTER).toBe("temporary-header");
+    expect(env.ORGANIZATION_SELF_SERVICE_ENABLED).toBe(false);
     expect(parseCorsOrigins(env.CORS_ORIGINS)).toEqual([
       "http://localhost:3000",
       "http://localhost:3001"
@@ -46,6 +47,19 @@ describe("api env validation", () => {
     });
 
     expect(env.ORGANIZATION_SELF_SERVICE_ENABLED).toBe(false);
+  });
+
+  it("rejects organization self-service explicitly enabled in production", () => {
+    expect(() =>
+      loadApiEnv({
+        NODE_ENV: "production",
+        AUTH_ADAPTER: "external",
+        ORGANIZATION_SELF_SERVICE_ENABLED: "true",
+        DATABASE_URL: "postgresql://user:password@localhost:5432/app",
+        REDIS_URL: "redis://localhost:6379",
+        CORS_ORIGINS: "https://app.example.com"
+      })
+    ).toThrow();
   });
 
   it("rejects wildcard CORS when credentials are enabled", () => {

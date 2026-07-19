@@ -58,7 +58,15 @@ export function buildCurrentAccountContext(
   >();
 
   for (const row of actorRows) {
-    if (!row.organizationId || !row.organizationName || !row.organizationType) {
+    if (
+      !row.organizationId ||
+      !row.organizationName ||
+      !row.organizationType ||
+      !row.roleKey ||
+      !row.roleName ||
+      !row.unitId ||
+      !row.unitName
+    ) {
       continue;
     }
 
@@ -79,7 +87,7 @@ export function buildCurrentAccountContext(
       organizations.set(row.organizationId, organization);
     }
 
-    if (row.unitId && row.unitName && !organization.unitIds.has(row.unitId)) {
+    if (!organization.unitIds.has(row.unitId)) {
       organization.unitIds.add(row.unitId);
       organization.value.units.push({
         id: row.unitId,
@@ -89,25 +97,23 @@ export function buildCurrentAccountContext(
       });
     }
 
-    if (row.roleKey && row.roleName) {
-      const isGlobalRole = row.roleUnitId === null;
-      const isActiveUnitRole = row.roleUnitId !== null && row.roleUnitId === row.unitId;
+    const isGlobalRole = row.roleUnitId === null;
+    const isActiveUnitRole = row.roleUnitId !== null && row.roleUnitId === row.unitId;
 
-      if (isGlobalRole || isActiveUnitRole) {
-        const roleIdentity = `${row.roleKey}:${row.roleUnitId ?? "organization"}`;
-        if (!organization.roleKeys.has(roleIdentity)) {
-          organization.roleKeys.add(roleIdentity);
-          organization.value.roles.push({
-            key: row.roleKey,
-            name: row.roleName,
-            scope: isGlobalRole ? "ORGANIZATION" : "UNIT",
-            ...(row.roleUnitId ? { unitId: row.roleUnitId } : {})
-          });
-        }
+    if (isGlobalRole || isActiveUnitRole) {
+      const roleIdentity = `${row.roleKey}:${row.roleUnitId ?? "organization"}`;
+      if (!organization.roleKeys.has(roleIdentity)) {
+        organization.roleKeys.add(roleIdentity);
+        organization.value.roles.push({
+          key: row.roleKey,
+          name: row.roleName,
+          scope: isGlobalRole ? "ORGANIZATION" : "UNIT",
+          ...(row.roleUnitId ? { unitId: row.roleUnitId } : {})
+        });
       }
-
-      organization.value.isGlobalMember ||= isGlobalRole;
     }
+
+    organization.value.isGlobalMember ||= isGlobalRole;
   }
 
   const organizationValues = [...organizations.values()].map(({ value }) => {

@@ -40,8 +40,7 @@ export const apiEnvSchema = baseEnvSchema
   .transform((env) => ({
     ...env,
     SWAGGER_ENABLED: env.SWAGGER_ENABLED ?? env.NODE_ENV !== "production",
-    ORGANIZATION_SELF_SERVICE_ENABLED:
-      env.ORGANIZATION_SELF_SERVICE_ENABLED ?? env.NODE_ENV !== "production"
+    ORGANIZATION_SELF_SERVICE_ENABLED: env.ORGANIZATION_SELF_SERVICE_ENABLED ?? false
   }))
   .superRefine((env, context) => {
     if (env.NODE_ENV === "production" && env.AUTH_ADAPTER === "temporary-header") {
@@ -49,6 +48,14 @@ export const apiEnvSchema = baseEnvSchema
         code: z.ZodIssueCode.custom,
         path: ["AUTH_ADAPTER"],
         message: "Temporary authentication adapter cannot be used in production."
+      });
+    }
+
+    if (env.NODE_ENV === "production" && env.ORGANIZATION_SELF_SERVICE_ENABLED) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ORGANIZATION_SELF_SERVICE_ENABLED"],
+        message: "Organization self-service cannot be enabled in production."
       });
     }
 
