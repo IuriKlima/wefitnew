@@ -96,6 +96,7 @@ textarea {
   display: flex;
   min-height: 72px;
   padding: 16px 32px;
+  justify-content: space-between;
 }
 
 .topbar-kicker,
@@ -415,6 +416,40 @@ td span {
   display: flex;
   gap: 12px;
   justify-content: flex-start;
+}
+
+.login-page {
+  align-items: center;
+  background: var(--background);
+  display: grid;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 16px;
+  max-width: 440px;
+  padding: 32px;
+  width: 100%;
+}
+
+.login-form {
+  display: grid;
+  gap: 16px;
+}
+
+.form-error {
+  background: var(--danger-soft);
+  border: 1px solid #efc4c4;
+  border-radius: 8px;
+  color: var(--danger);
+  padding: 10px 12px;
 }
 
 .split-actions {

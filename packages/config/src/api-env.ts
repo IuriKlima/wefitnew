@@ -30,13 +30,18 @@ export const apiEnvSchema = baseEnvSchema
     CORS_ORIGINS: z.string().min(1).default("http://localhost:3000"),
     SWAGGER_ENABLED: optionalBooleanFromString,
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
-    AUTH_ADAPTER: z.enum(["temporary-header", "external", "supabase-jwt"]).default("temporary-header"),
+    AUTH_ADAPTER: z
+      .enum(["temporary-header", "external", "supabase-jwt"])
+      .default("temporary-header"),
+    ORGANIZATION_SELF_SERVICE_ENABLED: optionalBooleanFromString,
     SUPABASE_URL: z.string().url().optional(),
     SUPABASE_JWKS_URL: z.string().url().optional()
   })
   .transform((env) => ({
     ...env,
-    SWAGGER_ENABLED: env.SWAGGER_ENABLED ?? env.NODE_ENV !== "production"
+    SWAGGER_ENABLED: env.SWAGGER_ENABLED ?? env.NODE_ENV !== "production",
+    ORGANIZATION_SELF_SERVICE_ENABLED:
+      env.ORGANIZATION_SELF_SERVICE_ENABLED ?? env.NODE_ENV !== "production"
   }))
   .superRefine((env, context) => {
     if (env.NODE_ENV === "production" && env.AUTH_ADAPTER === "temporary-header") {
@@ -73,8 +78,15 @@ export const apiEnvSchema = baseEnvSchema
     }
   });
 
+const redisUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => ["redis:", "rediss:"].includes(new URL(value).protocol), {
+    message: "REDIS_URL must use redis:// or rediss://."
+  });
+
 export const workerEnvSchema = baseEnvSchema.extend({
-  REDIS_URL: z.string().min(1)
+  REDIS_URL: redisUrlSchema
 });
 
 export const testEnvSchema = z.object({

@@ -15,14 +15,27 @@ try {
 
   await assertDatabasePortReachable(parsed);
 
-  const result = spawnSync("prisma", ["migrate", "deploy", "--schema", "prisma/schema.prisma"], {
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrl
-    },
-    shell: process.platform === "win32",
-    stdio: "inherit"
-  });
+  const packageManagerPath = process.env.npm_execpath;
+  if (!packageManagerPath) {
+    throw new Error('Run this command through pnpm: "pnpm db:test:deploy".');
+  }
+
+  const result = spawnSync(
+    process.execPath,
+    [packageManagerPath, "exec", "prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"],
+    {
+      env: {
+        ...process.env,
+        DATABASE_URL: databaseUrl
+      },
+      shell: false,
+      stdio: "inherit"
+    }
+  );
+
+  if (result.error) {
+    throw new Error("Unable to start the Prisma CLI for the test database.");
+  }
 
   if (result.status !== 0) {
     process.exit(result.status ?? 1);

@@ -13,7 +13,10 @@ describe("supabase jwt auth adapter", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new SupabaseJwtAuthAdapter("https://foo.supabase.co/auth/v1/.well-known/jwks.json");
+    adapter = new SupabaseJwtAuthAdapter(
+      "https://foo.supabase.co/auth/v1/.well-known/jwks.json",
+      "https://foo.supabase.co"
+    );
   });
 
   it("returns null if no authorization header is provided", async () => {
@@ -42,7 +45,7 @@ describe("supabase jwt auth adapter", () => {
     vi.mocked(jwtVerify).mockResolvedValueOnce({
       payload: { audience: "authenticated" },
       protectedHeader: { alg: "RS256" },
-      key: {} as any
+      key: {} as Awaited<ReturnType<typeof jwtVerify>>["key"]
     });
 
     const actor = await adapter.resolveActor({
@@ -52,20 +55,38 @@ describe("supabase jwt auth adapter", () => {
     expect(actor).toBeNull();
   });
 
-  it("resolves user id from sub claim on successful verification", async () => {
+  it("returns null if the sub claim is not a UUID", async () => {
     vi.mocked(jwtVerify).mockResolvedValueOnce({
       payload: { sub: "user-123", audience: "authenticated" },
       protectedHeader: { alg: "RS256" },
-      key: {} as any
+      key: {} as Awaited<ReturnType<typeof jwtVerify>>["key"]
+    });
+
+    const actor = await adapter.resolveActor({
+      authorization: "Bearer valid-token-with-invalid-sub"
+    });
+
+    expect(actor).toBeNull();
+  });
+
+  it("resolves user id from sub claim on successful verification", async () => {
+    vi.mocked(jwtVerify).mockResolvedValueOnce({
+      payload: {
+        sub: "11111111-1111-4111-8111-111111111111",
+        audience: "authenticated"
+      },
+      protectedHeader: { alg: "RS256" },
+      key: {} as Awaited<ReturnType<typeof jwtVerify>>["key"]
     });
 
     const actor = await adapter.resolveActor({
       authorization: "Bearer valid-token"
     });
 
-    expect(actor).toEqual({ userId: "user-123" });
+    expect(actor).toEqual({ userId: "11111111-1111-4111-8111-111111111111" });
     expect(jwtVerify).toHaveBeenCalledWith("valid-token", expect.anything(), {
-      audience: "authenticated"
+      audience: "authenticated",
+      issuer: "https://foo.supabase.co/auth/v1"
     });
   });
 });

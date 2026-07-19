@@ -78,25 +78,38 @@ export class StudentsController {
 
   @Get()
   @RequirePermissions(permissionKeys.studentRead)
-  list(@Param() params: unknown, @Query() query: unknown, @Req() request: RequestWithContext) {
+  list(
+    @Param() params: unknown,
+    @Query() query: unknown,
+    @CurrentActor() actor: AuthenticatedActor,
+    @Req() request: RequestWithContext
+  ) {
     const routeParams = studentRouteParamsSchema.parse(params);
     const parsedQuery = listStudentsQuerySchema.parse(query);
 
     return this.listStudentsUseCase.execute(
       routeParams.organizationId,
       parsedQuery,
+      actor.userId,
+      request.correlationId ?? "",
       request.requestContext?.unitId
     );
   }
 
   @Get(":studentId")
   @RequirePermissions(permissionKeys.studentRead)
-  getById(@Param() params: unknown, @Req() request: RequestWithContext) {
+  getById(
+    @Param() params: unknown,
+    @CurrentActor() actor: AuthenticatedActor,
+    @Req() request: RequestWithContext
+  ) {
     const routeParams = studentRouteParamsSchema.required({ studentId: true }).parse(params);
 
     return this.getStudentUseCase.execute(
       routeParams.organizationId,
       routeParams.studentId,
+      actor.userId,
+      request.correlationId ?? "",
       request.requestContext?.unitId
     );
   }

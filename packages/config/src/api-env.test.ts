@@ -36,6 +36,18 @@ describe("api env validation", () => {
     ).toThrow();
   });
 
+  it("disables organization self-service by default in production", () => {
+    const env = loadApiEnv({
+      NODE_ENV: "production",
+      AUTH_ADAPTER: "external",
+      DATABASE_URL: "postgresql://user:password@localhost:5432/app",
+      REDIS_URL: "redis://localhost:6379",
+      CORS_ORIGINS: "https://app.example.com"
+    });
+
+    expect(env.ORGANIZATION_SELF_SERVICE_ENABLED).toBe(false);
+  });
+
   it("rejects wildcard CORS when credentials are enabled", () => {
     expect(() =>
       loadApiEnv({
@@ -81,5 +93,14 @@ describe("api env validation", () => {
         REDIS_URL: "redis://localhost:6379"
       }).REDIS_URL
     ).toBe("redis://localhost:6379");
+  });
+
+  it("accepts an authenticated Redis TLS URL for workers", () => {
+    expect(
+      loadWorkerEnv({
+        NODE_ENV: "production",
+        REDIS_URL: "rediss://worker:password@redis.example.com:6380"
+      }).REDIS_URL
+    ).toBe("rediss://worker:password@redis.example.com:6380");
   });
 });

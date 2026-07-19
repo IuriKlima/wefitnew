@@ -1,0 +1,92 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: gym-platform-api:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3333"
+      API_HOST: 0.0.0.0
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DIRECT_URL: ${DIRECT_URL:-}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      SWAGGER_ENABLED: "false"
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      AUTH_ADAPTER: supabase-jwt
+      ORGANIZATION_SELF_SERVICE_ENABLED: "false"
+      SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
+      SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:?SUPABASE_JWKS_URL is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${API_PORT:-3333}:3333"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3333/health/ready').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  admin-web:
+    build:
+      context: .
+      dockerfile: apps/admin-web/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?NEXT_PUBLIC_SUPABASE_URL is required}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:?NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is required}
+    image: gym-platform-admin-web:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      ADMIN_API_BASE_URL: http://api:3333
+      ADMIN_AUTH_ADAPTER: supabase-jwt
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?NEXT_PUBLIC_SUPABASE_URL is required}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:?NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is required}
+    ports:
+      - "${ADMIN_WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  workers:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    image: gym-platform-workers:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const net=require('node:net');const redis=new URL(process.env.REDIS_URL);const socket=net.connect(Number(redis.port || 6379), redis.hostname);socket.setTimeout(3000);socket.on('connect',()=>{socket.end();process.exit(0)});socket.on('timeout',()=>process.exit(1));socket.on('error',()=>process.exit(1));"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

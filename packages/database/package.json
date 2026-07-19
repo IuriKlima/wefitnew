@@ -24,6 +24,7 @@
     "db:migrate": "prisma migrate dev --schema prisma/schema.prisma --name init",
     "db:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "db:test:deploy": "node scripts/deploy-test-database.mjs",
+    "db:provision:beta": "node scripts/provision-beta-tenant-lib.mjs",
     "db:studio": "prisma studio --schema prisma/schema.prisma"
   },
   "dependencies": {

@@ -57,20 +57,35 @@ export class UnitsController {
 
   @Get()
   @RequirePermissions(permissionKeys.unitRead)
-  list(@Param() params: unknown, @Req() request: RequestWithContext) {
+  list(
+    @Param() params: unknown,
+    @CurrentActor() actor: AuthenticatedActor,
+    @Req() request: RequestWithContext
+  ) {
     const routeParams = unitRouteParamsSchema.parse(params);
 
     return this.listUnitsUseCase.execute(
       routeParams.organizationId,
+      actor.userId,
+      request.correlationId ?? "",
       request.requestContext?.unitId
     );
   }
 
   @Get(":unitId")
   @RequirePermissions(permissionKeys.unitRead)
-  getById(@Param() params: unknown) {
+  getById(
+    @Param() params: unknown,
+    @CurrentActor() actor: AuthenticatedActor,
+    @Req() request: RequestWithContext
+  ) {
     const routeParams = unitRouteParamsSchema.required({ unitId: true }).parse(params);
 
-    return this.getUnitUseCase.execute(routeParams.organizationId, routeParams.unitId);
+    return this.getUnitUseCase.execute(
+      routeParams.organizationId,
+      routeParams.unitId,
+      actor.userId,
+      request.correlationId ?? ""
+    );
   }
 }

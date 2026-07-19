@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { PrismaClient, Prisma } from "@gym-platform/database";
+import { PrismaClient } from "@gym-platform/database";
 import { randomUUID } from "crypto";
 import { PrismaService } from "../../src/infrastructure/database/prisma.service";
 
 describe("Row Level Security (RLS) - Integration", () => {
   let adminClient: PrismaClient;
   let prismaService: PrismaService;
-  
+
   const tenantA = randomUUID();
   const tenantB = randomUUID();
   const unitA1 = randomUUID();
@@ -20,9 +20,11 @@ describe("Row Level Security (RLS) - Integration", () => {
     adminClient = new PrismaClient({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL_TEST || "postgresql://gym_platform:gym_platform_test_password@localhost:55432/gym_platform_test?schema=public",
-        },
-      },
+          url:
+            process.env.DATABASE_URL_TEST ||
+            "postgresql://gym_platform:gym_platform_test_password@localhost:55432/gym_platform_test?schema=public"
+        }
+      }
     });
     console.log("adminClient initialized");
 
@@ -47,46 +49,51 @@ describe("Row Level Security (RLS) - Integration", () => {
       $$;
     `);
     console.log("Granting privileges to wefit_api_test role...");
-    await adminClient.$executeRawUnsafe(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wefit_api_test;`);
+    await adminClient.$executeRawUnsafe(
+      `GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wefit_api_test;`
+    );
     await adminClient.$executeRawUnsafe(`GRANT USAGE ON SCHEMA public TO wefit_api_test;`);
     // Ensure it can use sequences and functions
-    await adminClient.$executeRawUnsafe(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO wefit_api_test;`);
-    await adminClient.$executeRawUnsafe(`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO wefit_api_test;`);
+    await adminClient.$executeRawUnsafe(
+      `GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO wefit_api_test;`
+    );
+    await adminClient.$executeRawUnsafe(
+      `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO wefit_api_test;`
+    );
     console.log("Privileges granted.");
 
     console.log("Initializing prismaService...");
     prismaService = new PrismaService({
       datasources: {
         db: {
-          url: "postgresql://wefit_api_test:testpassword@localhost:55432/gym_platform_test?schema=public",
-        },
-      },
+          url: "postgresql://wefit_api_test:testpassword@localhost:55432/gym_platform_test?schema=public"
+        }
+      }
     });
     console.log("prismaService initialized.");
 
     console.log("Seeding data...");
     // Seed Data (gym_platform can insert before RLS is enabled)
     await adminClient.$transaction(async (tx) => {
-      
       await tx.organization.createMany({
         data: [
           { id: tenantA, type: "NETWORK", slug: tenantA, legalName: "Tenant A" },
-          { id: tenantB, type: "GYM", slug: tenantB, legalName: "Tenant B" },
-        ],
+          { id: tenantB, type: "GYM", slug: tenantB, legalName: "Tenant B" }
+        ]
       });
 
       await tx.unit.createMany({
         data: [
           { id: unitA1, organizationId: tenantA, name: "Unit A1", code: "A1" },
-          { id: unitB1, organizationId: tenantB, name: "Unit B1", code: "B1" },
-        ],
+          { id: unitB1, organizationId: tenantB, name: "Unit B1", code: "B1" }
+        ]
       });
 
       await tx.user.createMany({
         data: [
           { id: userA, name: "User A", email: `${userA}@test.com` },
-          { id: userB, name: "User B", email: `${userB}@test.com` },
-        ],
+          { id: userB, name: "User B", email: `${userB}@test.com` }
+        ]
       });
 
       const membershipA = randomUUID();
@@ -95,8 +102,8 @@ describe("Row Level Security (RLS) - Integration", () => {
       await tx.membership.createMany({
         data: [
           { id: membershipA, organizationId: tenantA, userId: userA, status: "ACTIVE" },
-          { id: membershipB, organizationId: tenantB, userId: userB, status: "ACTIVE" },
-        ],
+          { id: membershipB, organizationId: tenantB, userId: userB, status: "ACTIVE" }
+        ]
       });
 
       const roleA = randomUUID();
@@ -105,14 +112,26 @@ describe("Row Level Security (RLS) - Integration", () => {
       await tx.role.createMany({
         data: [
           { id: roleA, organizationId: tenantA, key: "owner_a", name: "Owner A", isSystem: false },
-          { id: roleB, organizationId: tenantB, key: "owner_b", name: "Owner B", isSystem: false },
+          { id: roleB, organizationId: tenantB, key: "owner_b", name: "Owner B", isSystem: false }
         ]
       });
 
       await tx.membershipRole.createMany({
         data: [
-          { id: randomUUID(), organizationId: tenantA, membershipId: membershipA, roleId: roleA, unitId: null },
-          { id: randomUUID(), organizationId: tenantB, membershipId: membershipB, roleId: roleB, unitId: null },
+          {
+            id: randomUUID(),
+            organizationId: tenantA,
+            membershipId: membershipA,
+            roleId: roleA,
+            unitId: null
+          },
+          {
+            id: randomUUID(),
+            organizationId: tenantB,
+            membershipId: membershipB,
+            roleId: roleB,
+            unitId: null
+          }
         ]
       });
     });
@@ -121,8 +140,16 @@ describe("Row Level Security (RLS) - Integration", () => {
     console.log("Enabling RLS...");
     // Enable RLS for this test suite
     const tables = [
-      "Organization", "Unit", "Membership", "Role", "MembershipRole",
-      "RolePermission", "OrganizationSubscription", "Student", "StudentUnit", "AuditLog"
+      "Organization",
+      "Unit",
+      "Membership",
+      "Role",
+      "MembershipRole",
+      "RolePermission",
+      "OrganizationSubscription",
+      "Student",
+      "StudentUnit",
+      "AuditLog"
     ];
     for (const table of tables) {
       await adminClient.$executeRawUnsafe(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY;`);
@@ -134,13 +161,21 @@ describe("Row Level Security (RLS) - Integration", () => {
   afterAll(async () => {
     // Disable RLS
     const tables = [
-      "Organization", "Unit", "Membership", "Role", "MembershipRole",
-      "RolePermission", "OrganizationSubscription", "Student", "StudentUnit", "AuditLog"
+      "Organization",
+      "Unit",
+      "Membership",
+      "Role",
+      "MembershipRole",
+      "RolePermission",
+      "OrganizationSubscription",
+      "Student",
+      "StudentUnit",
+      "AuditLog"
     ];
     for (const table of tables) {
       await adminClient.$executeRawUnsafe(`ALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;`);
     }
-    
+
     await adminClient.$transaction(async (tx) => {
       await tx.membershipRole.deleteMany({ where: { organizationId: { in: [tenantA, tenantB] } } });
       await tx.role.deleteMany({ where: { organizationId: { in: [tenantA, tenantB] } } });
@@ -149,7 +184,7 @@ describe("Row Level Security (RLS) - Integration", () => {
       await tx.organization.deleteMany({ where: { id: { in: [tenantA, tenantB] } } });
       await tx.user.deleteMany({ where: { id: { in: [userA, userB] } } });
     });
-    
+
     await prismaService.$disconnect();
     await prismaService.$disconnect();
     await adminClient.$disconnect();
@@ -168,7 +203,7 @@ describe("Row Level Security (RLS) - Integration", () => {
       async (tx) => {
         const orgs = await tx.organization.findMany();
         expect(orgs.length).toBeGreaterThan(0);
-        expect(orgs.some(o => o.id === tenantB)).toBe(false);
+        expect(orgs.some((o) => o.id === tenantB)).toBe(false);
       }
     );
   });
@@ -178,11 +213,11 @@ describe("Row Level Security (RLS) - Integration", () => {
       { organizationId: tenantA, unitId: unitA1, actorUserId: userA },
       async (tx) => {
         const units = await tx.unit.findMany();
-        expect(units.some(u => u.id !== unitA1)).toBe(false);
+        expect(units.some((u) => u.id !== unitA1)).toBe(false);
       }
     );
   });
-  
+
   it("4. Escrita vazada falha (Insert cross-tenant)", async () => {
     await expect(
       prismaService.withTenantContext(
@@ -193,7 +228,7 @@ describe("Row Level Security (RLS) - Integration", () => {
               id: randomUUID(),
               organizationId: tenantB,
               name: "Hacked Unit",
-              code: "HACK",
+              code: "HACK"
             }
           });
         }

@@ -4,7 +4,7 @@ import {
   resolveFeatureEntitlement,
   type ResolvedFeatureEntitlement
 } from "@gym-platform/contracts";
-import type { PrismaClient } from "@gym-platform/database";
+import { Prisma, type PrismaClient } from "@gym-platform/database";
 
 import { PrismaService } from "../../infrastructure/database/prisma.service.js";
 
@@ -19,17 +19,19 @@ export class SubscriptionsService {
 
   async resolveFeature(
     organizationId: string,
-    featureKey: string
+    featureKey: string,
+    client: PrismaClient | Prisma.TransactionClient = this.prisma
   ): Promise<ResolvedFeatureEntitlement> {
-    return (await this.resolveOrganizationFeature(organizationId, featureKey)).entitlement;
+    return (await this.resolveOrganizationFeature(organizationId, featureKey, client)).entitlement;
   }
 
   async resolveOrganizationFeature(
     organizationId: string,
-    featureKey: string
+    featureKey: string,
+    client: PrismaClient | Prisma.TransactionClient = this.prisma
   ): Promise<ResolvedOrganizationFeature> {
     const now = new Date();
-    const subscription = await this.prisma.organizationSubscription.findFirst({
+    const subscription = await client.organizationSubscription.findFirst({
       where: {
         organizationId,
         status: {

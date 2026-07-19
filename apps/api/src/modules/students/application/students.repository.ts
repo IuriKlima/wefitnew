@@ -9,9 +9,9 @@ import type {
 } from "@gym-platform/validation";
 
 import { DomainError } from "../../../common/errors/domain-error.js";
-import { PrismaService } from "../../../infrastructure/database/prisma.service.js";
+import { AuditService } from "../../audit/audit.service.js";
 
-type PrismaClientLike = PrismaService | Prisma.TransactionClient;
+type PrismaClientLike = Prisma.TransactionClient;
 
 const studentUnitInclude = {
   unit: {
@@ -33,64 +33,61 @@ type StudentWithUnits = Prisma.StudentGetPayload<{
 
 @Injectable()
 export class StudentsRepository {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(@Inject(AuditService) private readonly auditService: AuditService) {}
 
   async create(
+    transaction: Prisma.TransactionClient,
     input: CreateStudentInput,
     actorUserId: string,
     correlationId: string
   ): Promise<Student> {
-    return this.prisma.$transaction(async (transaction) => {
-      await this.assertOrganizationExists(transaction, input.organizationId);
-      await this.assertUserExists(transaction, input.userId);
-      const unitIds = uniqueIds(input.unitIds);
-      await this.assertUnitsBelongToOrganization(transaction, input.organizationId, unitIds);
+    await this.assertOrganizationExists(transaction, input.organizationId);
+    await this.assertUserExists(transaction, input.userId);
+    const unitIds = uniqueIds(input.unitIds);
+    await this.assertUnitsBelongToOrganization(transaction, input.organizationId, unitIds);
 
-      const student = await transaction.student.create({
-        data: {
-          organizationId: input.organizationId,
-          userId: input.userId ?? null,
-          name: input.name,
-          socialName: input.socialName ?? null,
-          email: input.email ?? null,
-          phone: input.phone ?? null,
-          birthDate: input.birthDate ? toBirthDate(input.birthDate) : null,
-          operationalNote: input.operationalNote ?? null,
-          status: input.status
-        }
-      });
-
-      if (unitIds.length > 0) {
-        await transaction.studentUnit.createMany({
-          data: unitIds.map((selectedUnitId) => ({
-            organizationId: input.organizationId,
-            studentId: student.id,
-            unitId: selectedUnitId
-          }))
-        });
+    const student = await transaction.student.create({
+      data: {
+        organizationId: input.organizationId,
+        userId: input.userId ?? null,
+        name: input.name,
+        socialName: input.socialName ?? null,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        birthDate: input.birthDate ? toBirthDate(input.birthDate) : null,
+        operationalNote: input.operationalNote ?? null,
+        status: input.status
       }
-
-      await transaction.auditLog.create({
-        data: {
-          organizationId: input.organizationId,
-          unitId: null,
-          actorUserId,
-          action: "student.created",
-          entity: "Student",
-          entityId: student.id,
-          correlationId,
-          metadata: {
-            status: input.status,
-            unitIds
-          }
-        }
-      });
-
-      return this.findForOrganization(transaction, input.organizationId, student.id);
     });
+
+    if (unitIds.length > 0) {
+      await transaction.studentUnit.createMany({
+        data: unitIds.map((selectedUnitId) => ({
+          organizationId: input.organizationId,
+          studentId: student.id,
+          unitId: selectedUnitId
+        }))
+      });
+    }
+
+    await this.auditService.record(transaction, {
+      organizationId: input.organizationId,
+      actorUserId,
+      action: "student.created",
+      entity: "Student",
+      entityId: student.id,
+      correlationId,
+      metadata: {
+        status: input.status,
+        unitIds
+      }
+    });
+
+    return this.findForOrganization(transaction, input.organizationId, student.id);
   }
 
   async list(
+    transaction: Prisma.TransactionClient,
     organizationId: string,
     query: ListStudentsQueryInput,
     unitId?: string
@@ -99,9 +96,9 @@ export class StudentsRepository {
     const skip = (query.page - 1) * query.pageSize;
     const include = buildStudentInclude(unitId);
 
-    const [total, students] = await this.prisma.$transaction([
-      this.prisma.student.count({ where }),
-      this.prisma.student.findMany({
+    const [total, students] = await Promise.all([
+      transaction.student.count({ where }),
+      transaction.student.findMany({
         where,
         include,
         orderBy: [
@@ -128,93 +125,30 @@ export class StudentsRepository {
     };
   }
 
-  async get(organizationId: string, studentId: string, unitId?: string): Promise<Student> {
-    return this.findForOrganization(this.prisma, organizationId, studentId, unitId);
+  async get(
+    transaction: Prisma.TransactionClient,
+    organizationId: string,
+    studentId: string,
+    unitId?: string
+  ): Promise<Student> {
+    return this.findForOrganization(transaction, organizationId, studentId, unitId);
   }
 
   async update(
+    transaction: Prisma.TransactionClient,
     organizationId: string,
     studentId: string,
     input: UpdateStudentInput,
     actorUserId: string,
     correlationId: string
   ): Promise<Student> {
-    return this.prisma.$transaction(async (transaction) => {
-      const currentStudent = await this.findForOrganization(transaction, organizationId, studentId);
-      await this.assertUserExists(transaction, input.userId);
+    const currentStudent = await this.findForOrganization(transaction, organizationId, studentId);
+    await this.assertUserExists(transaction, input.userId);
 
-      const data = buildStudentUpdateData(input);
-      const changedFields = Object.keys(data);
+    const data = buildStudentUpdateData(input);
+    const changedFields = Object.keys(data);
 
-      if (changedFields.length > 0) {
-        await transaction.student.update({
-          where: {
-            organizationId_id: {
-              organizationId,
-              id: studentId
-            }
-          },
-          data
-        });
-      }
-
-      if (input.unitIds !== undefined) {
-        const unitIds = uniqueIds(input.unitIds);
-        await this.assertUnitsBelongToOrganization(transaction, organizationId, unitIds);
-
-        await transaction.studentUnit.updateMany({
-          where: {
-            organizationId,
-            studentId,
-            deletedAt: null
-          },
-          data: {
-            deletedAt: new Date()
-          }
-        });
-
-        if (unitIds.length > 0) {
-          await transaction.studentUnit.createMany({
-            data: unitIds.map((selectedUnitId) => ({
-              organizationId,
-              studentId,
-              unitId: selectedUnitId
-            }))
-          });
-        }
-
-        changedFields.push("unitIds");
-      }
-
-      await transaction.auditLog.create({
-        data: {
-          organizationId,
-          unitId: null,
-          actorUserId,
-          action: resolveStudentUpdateAction(currentStudent.status, input.status),
-          entity: "Student",
-          entityId: studentId,
-          correlationId,
-          metadata: {
-            changedFields
-          }
-        }
-      });
-
-      return this.findForOrganization(transaction, organizationId, studentId);
-    });
-  }
-
-  async archive(
-    organizationId: string,
-    studentId: string,
-    actorUserId: string,
-    correlationId: string
-  ): Promise<Student> {
-    return this.prisma.$transaction(async (transaction) => {
-      await this.findForOrganization(transaction, organizationId, studentId);
-      const deletedAt = new Date();
-
+    if (changedFields.length > 0) {
       await transaction.student.update({
         where: {
           organizationId_id: {
@@ -222,11 +156,13 @@ export class StudentsRepository {
             id: studentId
           }
         },
-        data: {
-          status: "INACTIVE",
-          deletedAt
-        }
+        data
       });
+    }
+
+    if (input.unitIds !== undefined) {
+      const unitIds = uniqueIds(input.unitIds);
+      await this.assertUnitsBelongToOrganization(transaction, organizationId, unitIds);
 
       await transaction.studentUnit.updateMany({
         where: {
@@ -235,34 +171,92 @@ export class StudentsRepository {
           deletedAt: null
         },
         data: {
-          deletedAt
+          deletedAt: new Date()
         }
       });
 
-      await transaction.auditLog.create({
-        data: {
-          organizationId,
-          unitId: null,
-          actorUserId,
-          action: "student.archived",
-          entity: "Student",
-          entityId: studentId,
-          correlationId
-        }
-      });
-
-      const student = await transaction.student.findUniqueOrThrow({
-        where: {
-          organizationId_id: {
+      if (unitIds.length > 0) {
+        await transaction.studentUnit.createMany({
+          data: unitIds.map((selectedUnitId) => ({
             organizationId,
-            id: studentId
-          }
-        },
-        include: buildStudentInclude()
-      });
+            studentId,
+            unitId: selectedUnitId
+          }))
+        });
+      }
 
-      return toStudent(student);
+      changedFields.push("unitIds");
+    }
+
+    await this.auditService.record(transaction, {
+      organizationId,
+      actorUserId,
+      action: resolveStudentUpdateAction(currentStudent.status, input.status),
+      entity: "Student",
+      entityId: studentId,
+      correlationId,
+      metadata: {
+        changedFields
+      }
     });
+
+    return this.findForOrganization(transaction, organizationId, studentId);
+  }
+
+  async archive(
+    transaction: Prisma.TransactionClient,
+    organizationId: string,
+    studentId: string,
+    actorUserId: string,
+    correlationId: string
+  ): Promise<Student> {
+    await this.findForOrganization(transaction, organizationId, studentId);
+    const deletedAt = new Date();
+
+    await transaction.student.update({
+      where: {
+        organizationId_id: {
+          organizationId,
+          id: studentId
+        }
+      },
+      data: {
+        status: "INACTIVE",
+        deletedAt
+      }
+    });
+
+    await transaction.studentUnit.updateMany({
+      where: {
+        organizationId,
+        studentId,
+        deletedAt: null
+      },
+      data: {
+        deletedAt
+      }
+    });
+
+    await this.auditService.record(transaction, {
+      organizationId,
+      actorUserId,
+      action: "student.archived",
+      entity: "Student",
+      entityId: studentId,
+      correlationId
+    });
+
+    const student = await transaction.student.findUniqueOrThrow({
+      where: {
+        organizationId_id: {
+          organizationId,
+          id: studentId
+        }
+      },
+      include: buildStudentInclude()
+    });
+
+    return toStudent(student);
   }
 
   private async findForOrganization(

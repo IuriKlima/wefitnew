@@ -1,10 +1,8 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 
 import { Prisma } from "@gym-platform/database";
 
 import { DomainError } from "../../common/errors/domain-error.js";
-import { PrismaService } from "../../infrastructure/database/prisma.service.js";
-
 const maxMetadataBytes = 8192;
 const sensitiveMetadataKeys = new Set(
   ["authorization", "cookie", "password", "token", "secret", "accessToken", "refreshToken"].map(
@@ -25,10 +23,13 @@ type AuditInput = {
 
 @Injectable()
 export class AuditService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
-
-  async record(input: AuditInput): Promise<void> {
-    await this.prisma.auditLog.create({
+  /**
+   * Audit entries participate in the caller's authorized tenant transaction.
+   * Accepting only a TransactionClient prevents an audit write from escaping the
+   * RLS context that authorized the business mutation.
+   */
+  async record(tx: Prisma.TransactionClient, input: AuditInput): Promise<void> {
+    await tx.auditLog.create({
       data: {
         organizationId: input.organizationId,
         unitId: input.unitId ?? null,

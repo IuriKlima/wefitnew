@@ -1,6 +1,7 @@
-import { Body, Controller, Inject, Post, Req } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Inject, Post, Req } from "@nestjs/common";
 
 import type { AuthenticatedActor } from "@gym-platform/auth";
+import { loadApiEnv } from "@gym-platform/config";
 import { createOrganizationSchema, type CreateOrganizationInput } from "@gym-platform/validation";
 
 import { CurrentActor } from "../../../common/auth/current-actor.decorator.js";
@@ -21,6 +22,10 @@ export class OrganizationsController {
     @CurrentActor() actor: AuthenticatedActor,
     @Req() request: RequestWithContext
   ) {
+    if (!loadApiEnv().ORGANIZATION_SELF_SERVICE_ENABLED) {
+      throw new ForbiddenException("Organization self-service onboarding is disabled.");
+    }
+
     return this.createOrganizationUseCase.execute(input, actor.userId, request.correlationId ?? "");
   }
 }

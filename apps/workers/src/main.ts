@@ -2,12 +2,10 @@ import { Queue } from "bullmq";
 
 import { loadWorkerEnv } from "@gym-platform/config";
 
+import { parseRedisConnection } from "./redis-connection.js";
+
 const env = loadWorkerEnv();
-const redisUrl = new URL(env.REDIS_URL);
-const connection = {
-  host: redisUrl.hostname,
-  port: Number(redisUrl.port || 6379)
-};
+const connection = parseRedisConnection(env.REDIS_URL);
 
 const healthQueue = new Queue("health", {
   connection

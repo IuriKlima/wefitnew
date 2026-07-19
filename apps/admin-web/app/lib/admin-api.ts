@@ -6,10 +6,18 @@ import type {
   UnitSummary
 } from "@gym-platform/contracts";
 
+import {
+  readAdminAuthAdapter,
+  requireSupabasePublicConfig,
+  type AdminAuthAdapter
+} from "./admin-auth";
+import { createClient } from "./supabase/server";
+
 type AdminConfig = {
+  authAdapter: AdminAuthAdapter;
   apiBaseUrl: string;
   organizationId: string;
-  devUserId: string;
+  devUserId?: string;
   unitId?: string;
 };
 
@@ -121,18 +129,10 @@ export async function archiveStudent(studentId: string): Promise<Student> {
 }
 
 function readAdminConfig(): AdminConfig {
-  const authAdapter = process.env.ADMIN_AUTH_ADAPTER ?? "temporary-header";
-
-  if (process.env.NODE_ENV === "production" && authAdapter === "temporary-header") {
-    throw new AdminApiError("Autenticacao administrativa temporaria bloqueada em producao.");
-  }
+  const authAdapter = readAdminAuthAdapter();
 
   if (authAdapter === "supabase-jwt") {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
-      throw new AdminApiError(
-        "Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY para usar supabase-jwt."
-      );
-    }
+    requireSupabasePublicConfig();
   }
 
   const apiBaseUrl = process.env.ADMIN_API_BASE_URL ?? "http://localhost:3333";
@@ -140,19 +140,19 @@ function readAdminConfig(): AdminConfig {
   const devUserId = process.env.ADMIN_DEV_USER_ID;
   const unitId = process.env.ADMIN_UNIT_ID?.trim();
 
-  // Se estivermos usando supabase-jwt, o devUserId não é mais estritamente obrigatório no header
-  // pois o Auth passará a injetar via Bearer token (isso será implementado nas próximas fases).
-  // Porém para manter retrocompatibilidade com testes temporários, mantemos o check para temporary-header.
-  if (authAdapter === "temporary-header" && (!organizationId || !devUserId)) {
+  if (!organizationId || (authAdapter === "temporary-header" && !devUserId)) {
     throw new AdminApiError(
-      "Configure ADMIN_ORGANIZATION_ID e ADMIN_DEV_USER_ID no servidor do admin."
+      authAdapter === "temporary-header"
+        ? "Configure ADMIN_ORGANIZATION_ID e ADMIN_DEV_USER_ID no servidor do admin."
+        : "Configure ADMIN_ORGANIZATION_ID no servidor do admin."
     );
   }
 
   return {
+    authAdapter,
     apiBaseUrl,
-    organizationId: organizationId || "",
-    devUserId: devUserId || "",
+    organizationId,
+    ...(devUserId ? { devUserId } : {}),
     ...(unitId ? { unitId } : {})
   };
 }
@@ -168,7 +168,7 @@ async function apiRequest<T>(
     cache: "no-store",
     headers: {
       "content-type": "application/json",
-      "x-dev-user-id": config.devUserId,
+      ...(await readAuthHeaders(config)),
       ...(config.unitId && options.includeUnitContext !== false
         ? { "x-unit-id": config.unitId }
         : {}),
@@ -185,6 +185,22 @@ async function apiRequest<T>(
   }
 
   return (await response.json()) as T;
+}
+
+async function readAuthHeaders(config: AdminConfig): Promise<Record<string, string>> {
+  if (config.authAdapter === "temporary-header") {
+    return { "x-dev-user-id": config.devUserId! };
+  }
+
+  const {
+    data: { session }
+  } = await (await createClient()).auth.getSession();
+
+  if (!session?.access_token) {
+    throw new AdminApiError("Sua sessão expirou. Entre novamente para continuar.", 401);
+  }
+
+  return { authorization: `Bearer ${session.access_token}` };
 }
 
 async function readErrorPayload(response: Response): Promise<{ message?: string }> {

@@ -29,8 +29,11 @@ export default tseslint.config(
             "packages/database/scripts/*.mjs",
             "packages/database/rls-spike/*.mjs",
             "packages/database/rls-spike/src/*.mjs",
-            "packages/database/rls-spike/test/*.mjs"
-          ]
+            "packages/database/rls-spike/test/*.mjs",
+            "scripts/*.mjs",
+            "scripts/test/*.mjs"
+          ],
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20
         },
         tsconfigRootDir: import.meta.dirname
       }

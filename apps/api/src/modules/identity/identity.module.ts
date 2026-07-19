@@ -14,7 +14,7 @@ import { IdentityService } from "./identity.service.js";
         const env = loadApiEnv();
 
         if (env.AUTH_ADAPTER === "supabase-jwt") {
-          return new SupabaseJwtAuthAdapter(env.SUPABASE_JWKS_URL!);
+          return new SupabaseJwtAuthAdapter(env.SUPABASE_JWKS_URL!, env.SUPABASE_URL!);
         }
 
         if (env.AUTH_ADAPTER === "temporary-header") {
