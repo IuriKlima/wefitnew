@@ -86,6 +86,7 @@ function row(overrides: Partial<AccountContextRow> = {}): AccountContextRow {
     organizationId: null,
     organizationName: "Tenant A",
     organizationType: "GYM",
+    organizationLifecycle: "ACTIVE",
     roleKey: "manager",
     roleName: "Gerencia",
     roleUnitId: unitAId,

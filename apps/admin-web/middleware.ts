@@ -5,7 +5,15 @@ import { readAdminAuthAdapter } from "./app/lib/admin-auth";
 import { refreshSupabaseSession } from "./app/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
-  if (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/api/health") {
+  const publicPaths = [
+    "/login",
+    "/signup",
+    "/auth/callback",
+    "/legal/terms",
+    "/legal/privacy",
+    "/api/health"
+  ];
+  if (publicPaths.includes(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
 

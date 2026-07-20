@@ -10,6 +10,7 @@ import { AuthorizationModule } from "./modules/authorization/authorization.modul
 import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
 import { MembershipsModule } from "./modules/memberships/memberships.module.js";
+import { OnboardingModule } from "./modules/onboarding/onboarding.module.js";
 import { OrganizationsModule } from "./modules/organizations/organizations.module.js";
 import { StudentsModule } from "./modules/students/students.module.js";
 import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module.js";
@@ -29,6 +30,7 @@ export const API_ENV = Symbol("API_ENV");
     UnitsModule,
     IdentityModule,
     MembershipsModule,
+    OnboardingModule,
     AuthorizationModule,
     SubscriptionsModule,
     AuditModule

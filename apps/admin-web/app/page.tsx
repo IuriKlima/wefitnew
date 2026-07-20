@@ -1,13 +1,31 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { getAdminAccountState } from "./lib/admin-api";
+import { getAdminAccountState, getOnboardingAvailability } from "./lib/admin-api";
+import { resolveHomeDestination } from "./lib/home-routing";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
-  const { active } = await getAdminAccountState();
+export default async function DashboardPage({
+  searchParams
+}: {
+  searchParams: Promise<{ welcome?: string }>;
+}) {
+  const [{ active }, onboardingAvailability, params] = await Promise.all([
+    getAdminAccountState(),
+    getOnboardingAvailability(),
+    searchParams
+  ]);
 
-  if (!active) {
+  const destination = resolveHomeDestination(
+    active?.organization.lifecycle ?? null,
+    onboardingAvailability
+  );
+  if (destination.startsWith("/")) {
+    redirect(destination);
+  }
+
+  if (!active || destination === "no-access") {
     return (
       <main className="content">
         <section className="empty-state">
@@ -24,6 +42,12 @@ export default async function DashboardPage() {
 
   return (
     <main className="content">
+      {params.welcome === "1" ? (
+        <section className="welcome-banner" role="status">
+          <strong>Bem-vindo ao Wefit.</strong>
+          <span>Sua organizacao foi ativada e ja esta pronta para a configuracao operacional.</span>
+        </section>
+      ) : null}
       <section className="dashboard-hero">
         <span className="eyebrow">Contexto ativo</span>
         <h1>{active.organization.name}</h1>

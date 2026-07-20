@@ -21,6 +21,27 @@ export async function readActiveContextSelection(): Promise<ActiveContextSelecti
   };
 }
 
+export async function writeActiveContextSelection(
+  organizationId: string,
+  unitId?: string
+): Promise<void> {
+  const cookieStore = await cookies();
+  const options = {
+    httpOnly: true,
+    maxAge: 60 * 60 * 24 * 30,
+    path: "/",
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production"
+  };
+
+  cookieStore.set(activeOrganizationCookie, organizationId, options);
+  if (unitId) {
+    cookieStore.set(activeUnitCookie, unitId, options);
+  } else {
+    cookieStore.delete(activeUnitCookie);
+  }
+}
+
 export function resolveActiveAccountContext(
   context: CurrentAccountContext,
   selection: ActiveContextSelection

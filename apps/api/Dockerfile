@@ -10,10 +10,10 @@ RUN corepack enable
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile \
-  && pnpm db:generate \
-  && pnpm --filter @gym-platform/api build \
-  && pnpm --filter @gym-platform/api --prod deploy --legacy /opt/runtime
+RUN pnpm install --frozen-lockfile
+RUN pnpm db:generate
+RUN pnpm --filter @gym-platform/api... build
+RUN pnpm --filter @gym-platform/api --prod deploy --legacy /opt/runtime
 
 FROM node:24-alpine AS runtime
 

@@ -38,10 +38,16 @@ Usuarios podem participar de multiplas organizacoes por memberships. Uma members
 
 `Student` pertence a `Organization`. Vinculos com unidades usam `StudentUnit`, com foreign keys compostas para impedir que um aluno de uma organizacao seja associado a uma unidade de outra organizacao.
 
+## Onboarding
+
+`OrganizationOnboarding` sempre contem `organizationId` e referencia o ator que iniciou a configuracao. Existe no maximo um onboarding ativo por organizacao e por ator. O bootstrap cria a organizacao com ciclo `ONBOARDING`, e os modulos de negocio exigem ciclo `ACTIVE`.
+
+O payload persistido possui versao de schema, enquanto a coluna `version` implementa concorrencia otimista. Cada atualizacao filtra simultaneamente por onboarding, organizacao, status, exclusao logica e versao esperada. A conclusao ativa organizacao, atualiza a unidade e encerra o onboarding na mesma transacao.
+
 ## Protecao contra acesso cruzado
 
 Consultas devem filtrar por `organizationId`. Identificadores globais como UUID nao sao suficientes para autorizar acesso. Testes de integracao devem cobrir isolamento entre organizacoes.
 
 ## RLS
 
-Row Level Security ainda nao esta ativa. A proposta esta em `docs/decisions/ADR-009-row-level-security.md` e deve ser validada antes de producao com alto risco de acesso direto ao banco.
+Row Level Security esta ativa e forçada em `OrganizationOnboarding`. A descoberta inicial usa uma funcao privilegiada estreita; depois dela, a API opera com o contexto transacional do ator e da organizacao. A cobertura completa das demais tabelas continua sendo evoluida conforme ADR-009, sem tratar UUID como autorizacao.

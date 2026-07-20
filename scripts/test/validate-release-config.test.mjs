@@ -11,6 +11,7 @@ function createValidEnv() {
     ADMIN_AUTH_ADAPTER: "supabase-jwt",
     SWAGGER_ENABLED: "false",
     ORGANIZATION_SELF_SERVICE_ENABLED: "false",
+    NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED: "false",
     RATE_LIMIT_MAX: "100",
     LOG_LEVEL: "info",
     DATABASE_URL:
@@ -38,6 +39,7 @@ test("rejects temporary authentication and unsafe flags", () => {
     ADMIN_AUTH_ADAPTER: "temporary-header",
     SWAGGER_ENABLED: "true",
     ORGANIZATION_SELF_SERVICE_ENABLED: "true",
+    NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED: "true",
     ADMIN_DEV_USER_ID: "11111111-1111-4111-8111-111111111111",
     ADMIN_ORGANIZATION_ID: "22222222-2222-4222-8222-222222222222",
     ADMIN_UNIT_ID: "33333333-3333-4333-8333-333333333333"
@@ -48,6 +50,7 @@ test("rejects temporary authentication and unsafe flags", () => {
     "ADMIN_AUTH_ADAPTER must be supabase-jwt.",
     "SWAGGER_ENABLED must be false for a release deployment.",
     "ORGANIZATION_SELF_SERVICE_ENABLED must be false for a release deployment.",
+    "NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED must be false for a release deployment.",
     "ADMIN_DEV_USER_ID must not be configured for a release deployment.",
     "ADMIN_ORGANIZATION_ID must not be configured; release context comes from /me/context.",
     "ADMIN_UNIT_ID must not be configured; release context comes from /me/context."

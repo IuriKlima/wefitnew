@@ -13,6 +13,18 @@ enum OrganizationType {
   NETWORK
 }
 
+enum OrganizationLifecycle {
+  ONBOARDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum OnboardingStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
 enum MembershipStatus {
   ACTIVE
   INVITED
@@ -35,8 +47,12 @@ enum StudentStatus {
 model Organization {
   id              String                     @id @default(uuid()) @db.Uuid
   type            OrganizationType
+  lifecycle       OrganizationLifecycle      @default(ACTIVE)
   legalName       String
   tradeName       String?
+  cnpj            String?
+  businessEmail   String?
+  businessPhone   String?
   slug            String                     @unique
   timezone        String                     @default("America/Sao_Paulo")
   createdAt       DateTime                   @default(now())
@@ -51,8 +67,10 @@ model Organization {
   students        Student[]
   studentUnits    StudentUnit[]
   auditLogs       AuditLog[]
+  onboardings     OrganizationOnboarding[]
 
   @@index([type])
+  @@index([lifecycle, deletedAt])
   @@index([deletedAt])
 }
 
@@ -62,7 +80,17 @@ model Unit {
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name            String
   code            String?
+  phone           String?
+  postalCode      String?
+  street          String?
+  streetNumber    String?
+  addressExtra    String?
+  neighborhood    String?
+  city            String?
+  state           String?
+  country         String           @default("BR")
   timezone        String           @default("America/Sao_Paulo")
+  openingHours    Json?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   deletedAt       DateTime?
@@ -77,18 +105,42 @@ model Unit {
 }
 
 model User {
-  id              String       @id @default(uuid()) @db.Uuid
-  name            String
-  email           String       @unique
-  emailVerifiedAt DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  deletedAt       DateTime?
-  memberships     Membership[]
-  students        Student[]
-  auditLogs       AuditLog[]
+  id                 String                   @id @default(uuid()) @db.Uuid
+  name               String
+  email              String                   @unique
+  emailVerifiedAt    DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  deletedAt          DateTime?
+  memberships        Membership[]
+  students           Student[]
+  auditLogs          AuditLog[]
+  createdOnboardings OrganizationOnboarding[] @relation("OnboardingCreator")
 
   @@index([deletedAt])
+}
+
+model OrganizationOnboarding {
+  id               String           @id @default(uuid()) @db.Uuid
+  organizationId   String           @db.Uuid
+  createdByUserId  String           @db.Uuid
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy        User             @relation("OnboardingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  status           OnboardingStatus @default(IN_PROGRESS)
+  currentStep      Int              @default(1)
+  selectedPlanCode String?
+  payload          Json
+  payloadVersion   Int              @default(1)
+  version          Int              @default(1)
+  completedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status, deletedAt])
+  @@index([createdByUserId, status, deletedAt])
+  @@index([status, updatedAt])
 }
 
 model Membership {

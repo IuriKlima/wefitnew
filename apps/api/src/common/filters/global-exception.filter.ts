@@ -48,7 +48,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
         code: "VALIDATION_ERROR",
-        message: "Invalid request payload.",
+        message: "Os dados informados são inválidos.",
         details: exception.flatten(),
         correlationId
       };

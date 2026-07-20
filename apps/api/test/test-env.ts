@@ -9,6 +9,7 @@ export function configureUnitTestEnv(): void {
   process.env.SWAGGER_ENABLED ??= "false";
   process.env.RATE_LIMIT_MAX ??= "1000";
   process.env.AUTH_ADAPTER ??= "temporary-header";
+  process.env.ORGANIZATION_SELF_SERVICE_ENABLED ??= "false";
 }
 
 export function configureIntegrationTestEnv(): void {
@@ -16,4 +17,5 @@ export function configureIntegrationTestEnv(): void {
   process.env.DATABASE_URL_TEST ??= defaultTestDatabaseUrl;
   process.env.DATABASE_URL = process.env.DATABASE_URL_TEST;
   process.env.ALLOW_TEST_DATABASE_RESET = "true";
+  process.env.ORGANIZATION_SELF_SERVICE_ENABLED = "true";
 }

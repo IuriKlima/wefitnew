@@ -14,7 +14,7 @@ export class ZodValidationPipe<T> implements PipeTransform<unknown, T> {
         throw error;
       }
 
-      throw new BadRequestException("Invalid request payload.");
+      throw new BadRequestException("Os dados informados são inválidos.");
     }
   }
 }

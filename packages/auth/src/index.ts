@@ -1,5 +1,7 @@
 export type AuthenticatedActor = {
   userId: string;
+  email?: string;
+  name?: string;
 };
 
 export type AuthHeaders = Record<string, string | string[] | undefined>;

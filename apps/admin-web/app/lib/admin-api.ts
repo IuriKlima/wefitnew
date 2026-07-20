@@ -2,6 +2,9 @@ import type {
   ActiveAccountContext,
   CurrentAccountContext,
   ListStudentsInput,
+  OnboardingAvailability,
+  OrganizationOnboardingPayload,
+  OrganizationOnboardingView,
   PaginatedStudents,
   Student,
   StudentPayload,
@@ -32,6 +35,18 @@ export type AdminAccountState = {
   active: ActiveAccountContext | null;
 };
 
+export type OnboardingStep =
+  "businessType" | "company" | "unit" | "responsible" | "operation" | "plan";
+
+export type OnboardingStepPayload = {
+  businessType: NonNullable<OrganizationOnboardingPayload["businessType"]>;
+  company: NonNullable<OrganizationOnboardingPayload["company"]>;
+  unit: NonNullable<OrganizationOnboardingPayload["unit"]>;
+  responsible: NonNullable<OrganizationOnboardingPayload["responsible"]>;
+  operation: NonNullable<OrganizationOnboardingPayload["operation"]>;
+  plan: NonNullable<OrganizationOnboardingPayload["plan"]>;
+};
+
 export class AdminApiError extends Error {
   constructor(
     message: string,
@@ -43,6 +58,43 @@ export class AdminApiError extends Error {
 
 export async function getCurrentAccountContext(): Promise<CurrentAccountContext> {
   return apiRequest<CurrentAccountContext>("/me/context");
+}
+
+export async function getOnboardingAvailability(): Promise<OnboardingAvailability> {
+  return apiRequest<OnboardingAvailability>("/onboarding/current");
+}
+
+export async function startOnboarding(): Promise<OrganizationOnboardingView> {
+  return apiRequest<OrganizationOnboardingView>("/onboarding/start", { method: "POST" });
+}
+
+export async function saveOnboardingStep<TStep extends OnboardingStep>(
+  step: TStep,
+  version: number,
+  payload: OnboardingStepPayload[TStep]
+): Promise<OrganizationOnboardingView> {
+  const path = step === "businessType" ? "business-type" : step;
+  return apiRequest<OrganizationOnboardingView>("/onboarding/current/steps/" + path, {
+    method: "PATCH",
+    body: JSON.stringify({ version, ...payload })
+  });
+}
+
+export async function completeOnboarding(version: number): Promise<OrganizationOnboardingView> {
+  return apiRequest<OrganizationOnboardingView>("/onboarding/current/complete", {
+    method: "POST",
+    body: JSON.stringify({ version, confirmAccuracy: true })
+  });
+}
+
+export async function cancelOnboarding(
+  version: number,
+  reason?: string
+): Promise<OrganizationOnboardingView> {
+  return apiRequest<OrganizationOnboardingView>("/onboarding/current/cancel", {
+    method: "POST",
+    body: JSON.stringify({ version, ...(reason ? { reason } : {}) })
+  });
 }
 
 export async function getAdminAccountState(): Promise<AdminAccountState> {

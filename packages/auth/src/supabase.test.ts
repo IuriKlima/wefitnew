@@ -89,4 +89,37 @@ describe("supabase jwt auth adapter", () => {
       issuer: "https://foo.supabase.co/auth/v1"
     });
   });
+
+  it("derives normalized identity attributes only from verified JWT claims", async () => {
+    vi.mocked(jwtVerify).mockResolvedValueOnce({
+      payload: {
+        sub: "11111111-1111-4111-8111-111111111111",
+        email: " OWNER@EXAMPLE.TEST ",
+        user_metadata: { full_name: " Pessoa Responsavel " },
+        audience: "authenticated"
+      },
+      protectedHeader: { alg: "RS256" },
+      key: {} as Awaited<ReturnType<typeof jwtVerify>>["key"]
+    });
+
+    await expect(adapter.resolveActor({ authorization: "Bearer valid-token" })).resolves.toEqual({
+      userId: "11111111-1111-4111-8111-111111111111",
+      email: "owner@example.test",
+      name: "Pessoa Responsavel"
+    });
+  });
+
+  it("rejects a malformed email claim", async () => {
+    vi.mocked(jwtVerify).mockResolvedValueOnce({
+      payload: {
+        sub: "11111111-1111-4111-8111-111111111111",
+        email: "not-an-email",
+        audience: "authenticated"
+      },
+      protectedHeader: { alg: "RS256" },
+      key: {} as Awaited<ReturnType<typeof jwtVerify>>["key"]
+    });
+
+    await expect(adapter.resolveActor({ authorization: "Bearer valid-token" })).resolves.toBeNull();
+  });
 });

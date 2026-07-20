@@ -1,4 +1,5 @@
 import { createPrismaClient, type PrismaClient } from "@gym-platform/database";
+import { permissionKeys } from "@gym-platform/permissions";
 
 import { configureIntegrationTestEnv } from "./test-env.js";
 
@@ -23,6 +24,7 @@ export async function assertDatabaseAvailable(prisma: PrismaClient): Promise<voi
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   assertSafeTestDatabaseUrl(process.env.DATABASE_URL_TEST ?? process.env.DATABASE_URL);
 
+  await prisma.organizationOnboarding.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.studentUnit.deleteMany();
   await prisma.student.deleteMany();
@@ -38,6 +40,13 @@ export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.unit.deleteMany();
   await prisma.user.deleteMany();
   await prisma.organization.deleteMany();
+  await prisma.permission.createMany({
+    data: Object.values(permissionKeys).map((key) => ({
+      key,
+      description: `Allows ${key}.`
+    })),
+    skipDuplicates: true
+  });
 }
 
 export function assertSafeTestDatabaseUrl(databaseUrl: string | undefined): void {

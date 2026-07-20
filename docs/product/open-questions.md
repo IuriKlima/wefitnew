@@ -7,7 +7,7 @@ As decisoes abaixo nao devem ser tomadas sem validacao de produto, comercial, ju
 - Precos.
 - Limites de alunos.
 - Limites de colaboradores.
-- Provedor definitivo de autenticacao.
+- Contrato e configuracao definitiva do projeto Supabase para producao.
 - Provedor de pagamentos.
 - Fornecedor definitivo de infraestrutura.
 - Politica comercial de inadimplencia.
@@ -16,6 +16,11 @@ As decisoes abaixo nao devem ser tomadas sem validacao de produto, comercial, ju
 - Armazenamento de biometria.
 - Politica de retencao de logs de auditoria.
 - Regras de upgrade, downgrade e bloqueio por plano.
-- Ativacao ou nao de Row Level Security.
+- Cronograma de expansao e validacao de Row Level Security para todas as tabelas de negocio.
 - Stack final e instalador do gateway local.
 - Politica final de backup e restore por tenant.
+- Aprovacao juridica dos termos de uso e da politica de privacidade; as paginas atuais sao
+  preliminares e bloqueiam abertura publica.
+- Criterios e responsaveis para liberar o self-service fora de desenvolvimento/testes.
+- Nomes, limites e precos definitivos dos codigos de configuracao `PERSONAL`, `GYM` e `NETWORK`;
+  hoje eles nao representam cobranca.

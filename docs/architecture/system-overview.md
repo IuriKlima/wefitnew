@@ -38,8 +38,13 @@ Controllers nao executam regra de negocio. Casos de uso e services coordenam reg
 ## Estado da fundacao
 
 - Autenticacao temporaria segura para desenvolvimento/testes.
+- Cadastro com Supabase e onboarding guiado de organizacao protegidos por feature flag, fechada por
+  padrao e proibida em producao nesta versao.
 - Autorizacao por membership, role, permissao e escopo de unidade.
+- Ciclo de vida explicito da organizacao: `ONBOARDING`, `ACTIVE` e `SUSPENDED`.
 - Entitlements por plano no banco.
 - Constraints de isolamento multi-tenant em tabelas criticas.
 - Testes unitarios sem infraestrutura e integracao PostgreSQL separada.
 - Modelo inicial de alunos decidido por ADR-011.
+- Bootstrap transacional da organizacao provisoria, unidade principal, owner e permissoes padrao,
+  com retomada e concorrencia otimista conforme ADR-015.

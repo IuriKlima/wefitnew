@@ -209,7 +209,7 @@ async function hasTenantPermission(
         is: { deletedAt: null }
       },
       organization: {
-        is: { deletedAt: null }
+        is: { lifecycle: "ACTIVE", deletedAt: null }
       }
     },
     include: {

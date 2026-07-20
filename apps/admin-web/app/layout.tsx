@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const accountState = await readOptionalAccountState();
 
-  if (!accountState) {
+  if (!accountState || accountState.active?.organization.lifecycle !== "ACTIVE") {
     return (
       <html lang="pt-BR">
         <body>{children}</body>

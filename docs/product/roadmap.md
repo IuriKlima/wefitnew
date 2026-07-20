@@ -5,6 +5,9 @@
 - Namespace tecnico `@gym-platform/*`.
 - Autenticacao Supabase JWT, com adapter temporario restrito ao desenvolvimento local.
 - Descoberta autenticada de contexto multi-academia.
+- Contexto autenticado validado com role PostgreSQL restrita e ciclo de vida da organizacao.
+- Cadastro Supabase e onboarding guiado persistente, disponiveis apenas em desenvolvimento e testes
+  enquanto o rollout publico nao for aprovado.
 - Guards globais de autenticacao e autorizacao.
 - Health live/ready.
 - Constraints multi-tenant criticas.
@@ -14,6 +17,7 @@
 
 ## Fase 1: Operacao essencial
 
+- Beta fechado com provisionamento controlado e onboarding assistido.
 - Gestao de alunos conforme ADR-011.
 - Agenda.
 - Treinos e avaliacoes em versao inicial.
@@ -42,4 +46,4 @@
 
 ## Fora do escopo atual
 
-Prontuario medico, biometria, CPF e portal/app final de alunos continuam fora da Fase 1A.
+Prontuario medico, biometria, CPF, cobranca no onboarding e portal/app final de alunos continuam fora da Fase 1A.

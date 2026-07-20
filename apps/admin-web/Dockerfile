@@ -9,8 +9,10 @@ ENV ADMIN_AUTH_ADAPTER=supabase-jwt
 
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ARG NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED=false
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED=$NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED
 
 RUN corepack enable
 
@@ -18,9 +20,10 @@ COPY . .
 
 RUN test -n "$NEXT_PUBLIC_SUPABASE_URL" \
   && test -n "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
-  && pnpm install --frozen-lockfile \
-  && pnpm --filter @gym-platform/admin-web build \
-  && pnpm --filter @gym-platform/admin-web --prod deploy --legacy /opt/runtime
+  && test "$NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED" = "false"
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @gym-platform/admin-web... build
+RUN pnpm --filter @gym-platform/admin-web --prod deploy --legacy /opt/runtime
 
 FROM node:24-alpine AS runtime
 

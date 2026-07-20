@@ -99,6 +99,12 @@ export function validateReleaseConfig(env = process.env) {
     errors.push("ORGANIZATION_SELF_SERVICE_ENABLED must be false for a release deployment.");
   }
 
+  if (readValue(env, "NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED") !== "false") {
+    errors.push(
+      "NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED must be false for a release deployment."
+    );
+  }
+
   if (readValue(env, "ADMIN_DEV_USER_ID")) {
     errors.push("ADMIN_DEV_USER_ID must not be configured for a release deployment.");
   }

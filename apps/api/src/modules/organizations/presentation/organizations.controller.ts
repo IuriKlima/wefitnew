@@ -22,8 +22,9 @@ export class OrganizationsController {
     @CurrentActor() actor: AuthenticatedActor,
     @Req() request: RequestWithContext
   ) {
-    if (!loadApiEnv().ORGANIZATION_SELF_SERVICE_ENABLED) {
-      throw new ForbiddenException("Organization self-service onboarding is disabled.");
+    const env = loadApiEnv();
+    if (env.NODE_ENV !== "test" || !env.ORGANIZATION_SELF_SERVICE_ENABLED) {
+      throw new ForbiddenException("Use the guided organization onboarding flow.");
     }
 
     return this.createOrganizationUseCase.execute(input, actor.userId, request.correlationId ?? "");

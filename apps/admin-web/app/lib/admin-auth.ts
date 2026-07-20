@@ -29,6 +29,16 @@ export function requireSupabasePublicConfig(): void {
   }
 }
 
+export function readAdminSelfServiceEnabled(): boolean {
+  const enabled = ["1", "true", "yes", "on"].includes(
+    (process.env.NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED ?? "").toLowerCase()
+  );
+  if (enabled && (process.env.NODE_ENV ?? "development") === "production") {
+    throw new Error("Organization self-service cannot be enabled in production.");
+  }
+  return enabled;
+}
+
 export function readSafeNextPath(value: string | string[] | undefined): string {
   const candidate = Array.isArray(value) ? value[0] : value;
 

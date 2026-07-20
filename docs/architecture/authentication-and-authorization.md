@@ -2,7 +2,9 @@
 
 ## Autenticacao
 
-O adapter principal valida JWTs emitidos pelo Supabase. O frontend envia o bearer token apenas pelo servidor, e a API deriva o ator exclusivamente do `sub` autenticado.
+O adapter principal valida JWTs emitidos pelo Supabase. O frontend envia o bearer token apenas pelo servidor, e a API deriva o ator exclusivamente do `sub` autenticado. E-mail e nome usados no bootstrap sao extraidos somente dos claims do JWT ja validado; valores enviados em formulario nao definem a identidade do ator no backend.
+
+O cadastro usa o cliente publico do Supabase, exige senha forte e aceite dos textos legais, e devolve resposta generica mesmo quando o provedor rejeita a solicitacao. A rota de callback troca apenas codigos validos por sessao e bloqueia destinos externos.
 
 O adapter `temporary-header` existe somente para desenvolvimento e testes locais. Ele le `x-dev-user-id`, valida UUID e e bloqueado quando `NODE_ENV=production`. Identidade, papeis, permissoes e escopo nunca podem ser aceitos por headers controlados pelo cliente.
 
@@ -19,6 +21,7 @@ Uma decisao de autorizacao deve considerar:
 - permissoes vinculadas;
 - escopo de unidade quando aplicavel;
 - entitlements do plano quando a acao depender de funcionalidade contratada.
+- ciclo de vida `ACTIVE` da organizacao para acessar modulos de negocio.
 
 ## Contexto de tenant
 
@@ -31,6 +34,8 @@ Rotas de negocio recebem `organizationId` pela rota e, quando aplicavel, `unitId
 ## Separacao de privilegios no banco
 
 A leitura inicial de contexto usa uma funcao `SECURITY DEFINER` com `search_path` fixo. O papel proprietario da funcao tem `BYPASSRLS`, e o papel de runtime recebe somente `EXECUTE` por meio de um papel consumidor sem `BYPASSRLS`. O runtime da API nunca deve receber o papel proprietario nem privilegios amplos de leitura.
+
+O bootstrap guiado segue o mesmo desenho: `start_actor_onboarding` e `resolve_actor_onboarding` pertencem a `wefit_onboarding_owner`, enquanto o runtime recebe somente a membership `wefit_onboarding_consumer`. Depois da descoberta estreita, todas as leituras e mutacoes da tabela de onboarding passam por RLS com `organizationId` definido na transacao.
 
 ## Backend como autoridade
 
@@ -51,7 +56,9 @@ Nenhum identificador fixo de organizacao ou unidade e aceito em staging ou produ
 - `GET /health` e `GET /health/live` sao publicos.
 - `GET /health/ready` e publico, mas valida PostgreSQL.
 - `GET /me/context` exige autenticacao e limita o retorno ao ator atual.
-- Criacao de organizacao exige usuario autenticado existente e cria papel owner padrao.
+- `GET /onboarding/current` e as mutacoes do onboarding derivam o ator do JWT e nao aceitam IDs de tenant como autoridade.
+- O bootstrap cria usuario ausente, organizacao e unidade provisorias, membership owner, permissoes padrao e onboarding em uma unica transacao idempotente.
+- Cadastro e bootstrap self-service ficam desabilitados por padrao e nao podem ser habilitados em producao nesta versao.
 - Rotas de unidade exigem permissoes `unit:read` ou `unit:manage`.
 - Rotas de alunos exigem permissoes `student:read` ou `student:manage`.
 - Logs de auditoria recebem `correlationId` quando disponivel.

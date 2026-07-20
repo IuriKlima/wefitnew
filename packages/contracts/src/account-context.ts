@@ -1,4 +1,5 @@
 export type AccountOrganizationType = "PERSONAL" | "GYM" | "NETWORK";
+export type AccountOrganizationLifecycle = "ONBOARDING" | "ACTIVE" | "SUSPENDED";
 
 export type AccountContextRole = {
   key: string;
@@ -18,6 +19,7 @@ export type AccountContextOrganization = {
   id: string;
   name: string;
   type: AccountOrganizationType;
+  lifecycle: AccountOrganizationLifecycle;
   isGlobalMember: boolean;
   roles: AccountContextRole[];
   units: AccountContextUnit[];

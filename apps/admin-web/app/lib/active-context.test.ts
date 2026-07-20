@@ -48,6 +48,7 @@ function organization(isGlobalMember: boolean): CurrentAccountContext["organizat
     id: organizationAId,
     name: "Tenant A",
     type: "GYM",
+    lifecycle: "ACTIVE",
     isGlobalMember,
     roles: [],
     units: [{ id: unitAId, name: "Unidade A", code: "A", isAllowed: true }]

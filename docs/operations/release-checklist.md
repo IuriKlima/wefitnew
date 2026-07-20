@@ -8,8 +8,9 @@
 - [ ] `RELEASE_ENV=staging node scripts/validate-release-config.mjs` passou com as variaveis injetadas pela plataforma, sem expor valores em log.
 - [ ] Staging executou smoke e a jornada autenticada de aluno/unidade sem vazamento entre tenants.
 - [ ] Credenciais de runtime, migration e operacao sao distintas, com menor privilegio e sem `BYPASSRLS` para runtime.
-- [ ] Role da API e membro de `wefit_context_consumer`, nao e membro de `wefit_context_reader` e executa `/me/context` com a credencial real.
-- [ ] `temporary-header` e onboarding self-service nao estao habilitados; Swagger esta desligado; CORS contem somente origens HTTPS esperadas.
+- [ ] Role da API e membro de `wefit_context_consumer` e `wefit_onboarding_consumer`, nao pertence a `wefit_context_reader` nem `wefit_onboarding_owner`, e nao possui `BYPASSRLS`.
+- [ ] `/me/context` e `/onboarding/current` foram executados com a credencial real de runtime restrita.
+- [ ] `temporary-header` e as flags backend/frontend de onboarding self-service nao estao habilitados; Swagger esta desligado; CORS contem somente origens HTTPS esperadas.
 - [ ] `ADMIN_ORGANIZATION_ID` e `ADMIN_UNIT_ID` nao existem no ambiente de release.
 - [ ] Backup recente confirmado e restore testado dentro do RTO acordado.
 - [ ] Dashboard e alertas de API, banco, Redis, workers e filas ativos; responsavel de incidente de plantao definido.
@@ -24,6 +25,9 @@
 - [ ] Executar `pnpm smoke:authenticated` com token curto; incluir um tenant proibido quando houver um segundo tenant de teste.
 - [ ] Validar `/me/context` com duas organizacoes e um usuario restrito a uma unidade; adulterar cookies/URLs e confirmar negacao sem vazamento.
 - [ ] Validar login real, autorizacao por organizacao/unidade, criacao/edicao/inativacao de aluno e registro de auditoria.
+- [ ] Confirmar que organizacoes `ONBOARDING` e `SUSPENDED` nao acessam modulos de negocio.
+- [ ] Em ambiente de teste autorizado, validar retomada, conflito de versao, cancelamento e conclusao
+      transacional das sete etapas sem cobranca.
 
 ## Depois da mudanca
 
@@ -35,5 +39,6 @@
 
 - [ ] Qualquer smoke ou healthcheck falhar.
 - [ ] Login real, permissao, tenant ou auditoria falhar.
+- [ ] O bootstrap deixar artefatos parciais ou a conclusao ativar apenas parte da organizacao/unidade.
 - [ ] Erros 5xx, latencia ou falhas de fila ultrapassarem o limite acordado.
 - [ ] A migration falhar ou produzir degradacao. Reversao deve usar plano aprovado e nova migration; nunca editar uma ja aplicada.

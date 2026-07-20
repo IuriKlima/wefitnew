@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import type {
   AccountContextOrganization,
+  AccountOrganizationLifecycle,
   AccountOrganizationType,
   CurrentAccountContext
 } from "@gym-platform/contracts";
@@ -14,6 +15,7 @@ export type AccountContextRow = {
   organizationId: string | null;
   organizationName: string | null;
   organizationType: AccountOrganizationType | null;
+  organizationLifecycle: AccountOrganizationLifecycle | null;
   roleKey: string | null;
   roleName: string | null;
   roleUnitId: string | null;
@@ -62,6 +64,7 @@ export function buildCurrentAccountContext(
       !row.organizationId ||
       !row.organizationName ||
       !row.organizationType ||
+      !row.organizationLifecycle ||
       !row.roleKey ||
       !row.roleName ||
       !row.unitId ||
@@ -77,6 +80,7 @@ export function buildCurrentAccountContext(
           id: row.organizationId,
           name: row.organizationName,
           type: row.organizationType,
+          lifecycle: row.organizationLifecycle,
           isGlobalMember: false,
           roles: [],
           units: []

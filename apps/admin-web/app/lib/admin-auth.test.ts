@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { readAdminAuthAdapter, readSafeNextPath } from "./admin-auth";
+import { readAdminAuthAdapter, readAdminSelfServiceEnabled, readSafeNextPath } from "./admin-auth";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -30,5 +30,15 @@ describe("admin authentication configuration", () => {
     expect(readSafeNextPath("//example.com")).toBe("/");
     expect(readSafeNextPath("/\\example.com")).toBe("/");
     expect(readSafeNextPath("/login?next=/login")).toBe("/");
+  });
+
+  it("mantem self-service desligado por padrao e rejeita ativacao em producao", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED", "");
+    expect(readAdminSelfServiceEnabled()).toBe(false);
+
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_ORGANIZATION_SELF_SERVICE_ENABLED", "true");
+    expect(() => readAdminSelfServiceEnabled()).toThrow("cannot be enabled in production");
   });
 });

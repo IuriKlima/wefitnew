@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CurrentAccountContext } from "@gym-platform/contracts";
 
 import { readActiveContextSelection } from "./active-context";
-import { listStudents } from "./admin-api";
+import { getOnboardingAvailability, listStudents, saveOnboardingStep } from "./admin-api";
 import { createClient } from "./supabase/server";
 
 vi.mock("./supabase/server", () => ({
@@ -24,6 +24,7 @@ const accountContext: CurrentAccountContext = {
       id: organizationId,
       name: "Academia permitida",
       type: "GYM",
+      lifecycle: "ACTIVE",
       isGlobalMember: true,
       roles: [{ key: "owner", name: "Owner", scope: "ORGANIZATION" }],
       units: [{ id: unitId, name: "Unidade permitida", code: "MAIN", isAllowed: true }]
@@ -81,6 +82,39 @@ describe("admin API authentication and account context", () => {
       statusCode: 401
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses only JWT identity for onboarding requests", async () => {
+    configureSupabaseEnv();
+    mockSupabaseSession("onboarding-token");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            selfServiceEnabled: true,
+            onboarding: null
+          }),
+          { status: 200 }
+        )
+    );
+
+    await getOnboardingAvailability();
+    await saveOnboardingStep("plan", 4, { selectedPlanCode: "GYM" });
+
+    expect(fetchMock.mock.calls[0]?.[0].toString()).toBe(
+      "http://api.example.test/onboarding/current"
+    );
+    expect(fetchMock.mock.calls[1]?.[0].toString()).toBe(
+      "http://api.example.test/onboarding/current/steps/plan"
+    );
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).toMatchObject({
+      authorization: "Bearer onboarding-token"
+    });
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).not.toHaveProperty("x-organization-id");
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).not.toHaveProperty("x-unit-id");
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(
+      JSON.stringify({ version: 4, selectedPlanCode: "GYM" })
+    );
   });
 });
 
