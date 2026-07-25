@@ -1,12 +1,13 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
+  HttpCode,
   Inject,
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req
 } from "@nestjs/common";
@@ -17,6 +18,7 @@ import { permissionKeys } from "@gym-platform/permissions";
 import {
   createStudentSchema,
   listStudentsQuerySchema,
+  replaceStudentUnitsSchema,
   updateStudentSchema
 } from "@gym-platform/validation";
 
@@ -24,11 +26,13 @@ import { CurrentActor } from "../../../common/auth/current-actor.decorator.js";
 import { RequireOrganizationScope } from "../../../common/auth/require-organization-scope.decorator.js";
 import { RequirePermissions } from "../../../common/auth/require-permissions.decorator.js";
 import type { RequestWithContext } from "../../../common/request-context/request-context.js";
-import { ArchiveStudentUseCase } from "../application/archive-student.use-case.js";
 import { CreateStudentUseCase } from "../application/create-student.use-case.js";
 import { GetStudentUseCase } from "../application/get-student.use-case.js";
 import { GetStudentDashboardSummaryUseCase } from "../application/get-student-dashboard-summary.use-case.js";
+import { ListStudentHistoryUseCase } from "../application/list-student-history.use-case.js";
 import { ListStudentsUseCase } from "../application/list-students.use-case.js";
+import { ReplaceStudentUnitsUseCase } from "../application/replace-student-units.use-case.js";
+import { SetStudentStatusUseCase } from "../application/set-student-status.use-case.js";
 import { UpdateStudentUseCase } from "../application/update-student.use-case.js";
 
 const studentRouteParamsSchema = z.object({
@@ -51,10 +55,14 @@ export class StudentsController {
     private readonly getStudentDashboardSummaryUseCase: GetStudentDashboardSummaryUseCase,
     @Inject(GetStudentUseCase)
     private readonly getStudentUseCase: GetStudentUseCase,
+    @Inject(ListStudentHistoryUseCase)
+    private readonly listStudentHistoryUseCase: ListStudentHistoryUseCase,
     @Inject(UpdateStudentUseCase)
     private readonly updateStudentUseCase: UpdateStudentUseCase,
-    @Inject(ArchiveStudentUseCase)
-    private readonly archiveStudentUseCase: ArchiveStudentUseCase
+    @Inject(ReplaceStudentUnitsUseCase)
+    private readonly replaceStudentUnitsUseCase: ReplaceStudentUnitsUseCase,
+    @Inject(SetStudentStatusUseCase)
+    private readonly setStudentStatusUseCase: SetStudentStatusUseCase
   ) {}
 
   @Post()
@@ -134,6 +142,24 @@ export class StudentsController {
     );
   }
 
+  @Get(":studentId/history")
+  @RequirePermissions(permissionKeys.studentRead)
+  listHistory(
+    @Param() params: unknown,
+    @CurrentActor() actor: AuthenticatedActor,
+    @Req() request: RequestWithContext
+  ) {
+    const routeParams = studentRouteParamsSchema.required({ studentId: true }).parse(params);
+
+    return this.listStudentHistoryUseCase.execute(
+      routeParams.organizationId,
+      routeParams.studentId,
+      actor.userId,
+      request.correlationId ?? "",
+      request.requestContext?.unitId
+    );
+  }
+
   @Patch(":studentId")
   @RequirePermissions(permissionKeys.studentManage)
   @RequireOrganizationScope()
@@ -155,19 +181,62 @@ export class StudentsController {
     );
   }
 
-  @Delete(":studentId")
+  @Put(":studentId/units")
   @RequirePermissions(permissionKeys.studentManage)
   @RequireOrganizationScope()
-  archive(
+  replaceUnits(
+    @Param() params: unknown,
+    @Body() body: unknown,
+    @CurrentActor() actor: AuthenticatedActor,
+    @Req() request: RequestWithContext
+  ) {
+    const routeParams = studentRouteParamsSchema.required({ studentId: true }).parse(params);
+    const parsedBody = replaceStudentUnitsSchema.parse(body);
+
+    return this.replaceStudentUnitsUseCase.execute(
+      routeParams.organizationId,
+      routeParams.studentId,
+      parsedBody,
+      actor.userId,
+      request.correlationId ?? ""
+    );
+  }
+
+  @Post(":studentId/inactivate")
+  @HttpCode(200)
+  @RequirePermissions(permissionKeys.studentManage)
+  @RequireOrganizationScope()
+  inactivate(
     @Param() params: unknown,
     @CurrentActor() actor: AuthenticatedActor,
     @Req() request: RequestWithContext
   ) {
     const routeParams = studentRouteParamsSchema.required({ studentId: true }).parse(params);
 
-    return this.archiveStudentUseCase.execute(
+    return this.setStudentStatusUseCase.execute(
       routeParams.organizationId,
       routeParams.studentId,
+      "INACTIVE",
+      actor.userId,
+      request.correlationId ?? ""
+    );
+  }
+
+  @Post(":studentId/reactivate")
+  @HttpCode(200)
+  @RequirePermissions(permissionKeys.studentManage)
+  @RequireOrganizationScope()
+  reactivate(
+    @Param() params: unknown,
+    @CurrentActor() actor: AuthenticatedActor,
+    @Req() request: RequestWithContext
+  ) {
+    const routeParams = studentRouteParamsSchema.required({ studentId: true }).parse(params);
+
+    return this.setStudentStatusUseCase.execute(
+      routeParams.organizationId,
+      routeParams.studentId,
+      "ACTIVE",
       actor.userId,
       request.correlationId ?? ""
     );

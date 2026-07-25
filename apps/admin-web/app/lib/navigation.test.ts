@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ActiveAccountContext } from "@gym-platform/contracts";
 
-import { buildAdminNavigation, canAccessStudents } from "./navigation";
+import { buildAdminNavigation, canAccessStudents, canManageStudents } from "./navigation";
 
 const activeContext: ActiveAccountContext = {
   organization: {
@@ -78,5 +78,21 @@ describe("admin navigation access", () => {
         }
       })
     ).toBe(false);
+  });
+
+  it("allows management only with an organization-level grant", () => {
+    expect(canManageStudents(activeContext)).toBe(false);
+    expect(
+      canManageStudents({
+        ...activeContext,
+        organization: {
+          ...activeContext.organization,
+          permissions: {
+            organization: ["student:read", "student:manage"],
+            units: {}
+          }
+        }
+      })
+    ).toBe(true);
   });
 });

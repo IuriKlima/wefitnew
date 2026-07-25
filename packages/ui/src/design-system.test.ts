@@ -31,6 +31,7 @@ describe("Wefit design system", () => {
     expect(tokens).toContain("--wf-color-brand-primary: #22b573");
     expect(tokens).toContain("--wf-control-height: 44px");
     expect(components).toContain("box-shadow: var(--wf-focus-ring)");
+    expect(components).toContain("contain: layout inline-size");
     expect(components).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });

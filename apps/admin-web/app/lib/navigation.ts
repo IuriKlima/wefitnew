@@ -3,6 +3,7 @@ import type { NavigationItem } from "@gym-platform/ui";
 
 const studentsFeatureKey = "students.manage";
 const studentReadPermission = "student:read";
+const studentManagePermission = "student:manage";
 
 export function buildAdminNavigation(
   active: ActiveAccountContext,
@@ -36,6 +37,13 @@ export function canAccessStudents(active: ActiveAccountContext): boolean {
 
   const subscription = active.organization.subscription;
   return !subscription || isFeatureEnabled(subscription.features, studentsFeatureKey);
+}
+
+export function canManageStudents(active: ActiveAccountContext): boolean {
+  return (
+    canAccessStudents(active) &&
+    active.organization.permissions.organization.includes(studentManagePermission)
+  );
 }
 
 export function hasPermissionInActiveScope(

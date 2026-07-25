@@ -1,141 +1,167 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { AdminApiError, getStudent, listUnits } from "../../lib/admin-api";
-import { archiveStudentAction, inactivateStudentAction, updateStudentAction } from "../actions";
+import type { StudentAuditEvent } from "@gym-platform/contracts";
+import { Breadcrumb, Card, EmptyState, ErrorState, StatusBadge, Tabs } from "@gym-platform/ui";
+
+import {
+  AdminApiError,
+  getAdminAccountState,
+  getStudent,
+  getStudentHistory,
+  listUnits
+} from "../../lib/admin-api";
+import { canManageStudents } from "../../lib/navigation";
+import {
+  inactivateStudentAction,
+  reactivateStudentAction,
+  replaceStudentUnitsAction
+} from "../actions";
 import { displayStudentName } from "../student-format";
+import { StudentLifecycleActions } from "../student-lifecycle-actions";
 import { UnitSelector } from "../unit-selector";
 
 export const dynamic = "force-dynamic";
 
 type StudentProfilePageProps = {
-  params: Promise<{
-    studentId: string;
-  }>;
+  params: Promise<{ studentId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function StudentProfilePage({ params }: StudentProfilePageProps) {
+export default async function StudentProfilePage({
+  params,
+  searchParams
+}: StudentProfilePageProps) {
   const { studentId } = await params;
+  const activeTab = readTab((await searchParams).tab);
 
   try {
-    const [student, units] = await Promise.all([getStudent(studentId), listUnits()]);
-    const updateAction = updateStudentAction.bind(null, student.id);
+    const { active } = await getAdminAccountState();
+    if (!active) {
+      throw new AdminApiError("Sua conta não possui acesso ativo a uma organização.", 403);
+    }
+
+    const canManage = canManageStudents(active);
+    const [student, history, units] = await Promise.all([
+      getStudent(studentId, active),
+      activeTab === "history" ? getStudentHistory(studentId, active) : Promise.resolve([]),
+      activeTab === "units" && canManage ? listUnits(active) : Promise.resolve([])
+    ]);
     const inactivateAction = inactivateStudentAction.bind(null, student.id);
-    const archiveConfirmation = `ARQUIVAR ${displayStudentName(student)}`;
-    const archiveAction = archiveStudentAction.bind(null, student.id, archiveConfirmation);
+    const reactivateAction = reactivateStudentAction.bind(null, student.id);
+    const replaceUnitsAction = replaceStudentUnitsAction.bind(null, student.id);
+    const name = displayStudentName(student);
 
     return (
-      <main className="content content-narrow">
-        <div className="page-heading">
+      <main className="content">
+        <Breadcrumb items={[{ label: "Alunos", href: "/students" }, { label: name }]} />
+        <header className="student-profile-header">
           <div>
-            <span className="eyebrow">Perfil</span>
-            <h1>{displayStudentName(student)}</h1>
-          </div>
-          <Link className="button" href="/students">
-            Voltar
-          </Link>
-        </div>
-
-        <section className="profile-summary">
-          <div>
-            <span>Status</span>
-            <strong>{student.status === "ACTIVE" ? "Ativo" : "Inativo"}</strong>
-          </div>
-          <div>
-            <span>Unidades</span>
-            <strong>
-              {student.units.length > 0
-                ? student.units.map((unit) => unit.name).join(", ")
-                : "Sem vinculo"}
-            </strong>
-          </div>
-        </section>
-
-        <section className="form-surface">
-          <form className="student-form" action={updateAction}>
-            <div className="form-grid">
-              <label>
-                <span>Nome</span>
-                <input name="name" required maxLength={160} defaultValue={student.name} />
-              </label>
-              <label>
-                <span>Nome social</span>
-                <input name="socialName" maxLength={160} defaultValue={student.socialName ?? ""} />
-              </label>
-              <label>
-                <span>E-mail</span>
-                <input
-                  name="email"
-                  type="email"
-                  maxLength={254}
-                  defaultValue={student.email ?? ""}
-                />
-              </label>
-              <label>
-                <span>Telefone</span>
-                <input name="phone" maxLength={40} defaultValue={student.phone ?? ""} />
-              </label>
-              <label>
-                <span>Nascimento</span>
-                <input name="birthDate" type="date" defaultValue={student.birthDate ?? ""} />
-              </label>
-              <label className="span-2">
-                <span>Observacao operacional</span>
-                <textarea
-                  name="operationalNote"
-                  maxLength={500}
-                  rows={4}
-                  defaultValue={student.operationalNote ?? ""}
-                />
-              </label>
-              <UnitSelector units={units} selectedUnitIds={student.units.map((unit) => unit.id)} />
+            <span className="eyebrow">Perfil do aluno</span>
+            <div className="student-profile-title">
+              <h1>{name}</h1>
+              <StatusBadge tone={student.status === "ACTIVE" ? "success" : "warning"}>
+                {student.status === "ACTIVE" ? "Ativo" : "Inativo"}
+              </StatusBadge>
             </div>
-            <div className="form-actions">
-              <button className="button button-primary" type="submit">
-                Salvar alteracoes
-              </button>
+            {student.socialName ? <p>Nome civil: {student.name}</p> : null}
+          </div>
+          {canManage ? (
+            <div className="student-header-actions">
+              <Link className="button" href={`/students/${student.id}/edit`}>
+                Editar cadastro
+              </Link>
+              <StudentLifecycleActions
+                status={student.status}
+                inactivateAction={inactivateAction}
+                reactivateAction={reactivateAction}
+              />
             </div>
-          </form>
-        </section>
+          ) : null}
+        </header>
 
-        <section className="lifecycle-surface">
-          <h2>Ciclo de vida</h2>
-          <div className="lifecycle-action">
+        <Tabs
+          activeId={activeTab}
+          items={[
+            { id: "summary", label: "Resumo", href: `/students/${student.id}?tab=summary` },
+            { id: "units", label: "Unidades", href: `/students/${student.id}?tab=units` },
+            { id: "history", label: "Histórico", href: `/students/${student.id}?tab=history` }
+          ]}
+        />
+
+        {activeTab === "summary" ? (
+          <div className="student-detail-grid">
+            <Card>
+              <h2>Contato</h2>
+              <dl className="student-definition-list">
+                <div>
+                  <dt>E-mail</dt>
+                  <dd>{student.email ?? "Não informado"}</dd>
+                </div>
+                <div>
+                  <dt>Telefone</dt>
+                  <dd>{student.phone ?? "Não informado"}</dd>
+                </div>
+                <div>
+                  <dt>Nascimento</dt>
+                  <dd>{student.birthDate ? formatDate(student.birthDate) : "Não informado"}</dd>
+                </div>
+              </dl>
+            </Card>
+            <Card>
+              <h2>Operação</h2>
+              <dl className="student-definition-list">
+                <div>
+                  <dt>Unidades</dt>
+                  <dd>{student.units.map(({ name: unitName }) => unitName).join(", ")}</dd>
+                </div>
+                <div>
+                  <dt>Cadastrado em</dt>
+                  <dd>{formatDateTime(student.createdAt)}</dd>
+                </div>
+                <div>
+                  <dt>Atualizado em</dt>
+                  <dd>{formatDateTime(student.updatedAt)}</dd>
+                </div>
+              </dl>
+            </Card>
+            <Card className="student-note-card">
+              <h2>Observação operacional</h2>
+              <p>{student.operationalNote ?? "Nenhuma observação operacional registrada."}</p>
+            </Card>
+          </div>
+        ) : null}
+
+        {activeTab === "units" ? (
+          <Card className="student-units-card">
             <div>
-              <h3>Inativar aluno</h3>
-              <p>
-                O cadastro continuará pesquisável no filtro de alunos inativos e poderá ser
-                consultado normalmente.
-              </p>
+              <h2>Unidades vinculadas</h2>
+              <p>Os vínculos seguem a política do tipo de organização e o escopo autorizado.</p>
             </div>
-            <form action={inactivateAction}>
-              <button className="button" type="submit" disabled={student.status === "INACTIVE"}>
-                {student.status === "INACTIVE" ? "Aluno inativo" : "Inativar aluno"}
-              </button>
-            </form>
-          </div>
+            {canManage ? (
+              <form className="student-form" action={replaceUnitsAction}>
+                <UnitSelector
+                  organizationType={active.organization.type}
+                  units={units}
+                  selectedUnitIds={student.units.map(({ id }) => id)}
+                />
+                <div className="form-actions">
+                  <button className="button button-primary" type="submit">
+                    Salvar vínculos
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <ul className="student-unit-list">
+                {student.units.map((unit) => (
+                  <li key={unit.id}>{unit.name}</li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        ) : null}
 
-          <div className="lifecycle-action lifecycle-danger">
-            <div>
-              <h3>Arquivar aluno</h3>
-              <p>
-                O cadastro deixará as listagens e seus vínculos com unidades serão encerrados. Esta
-                ação exige acesso organizacional.
-              </p>
-            </div>
-            <form className="archive-form" action={archiveAction}>
-              <label>
-                <span>
-                  Digite <strong>{archiveConfirmation}</strong> para confirmar
-                </span>
-                <input name="confirmation" required autoComplete="off" />
-              </label>
-              <button className="button button-danger" type="submit">
-                Arquivar aluno
-              </button>
-            </form>
-          </div>
-        </section>
+        {activeTab === "history" ? <StudentHistory events={history} /> : null}
       </main>
     );
   } catch (error) {
@@ -145,11 +171,91 @@ export default async function StudentProfilePage({ params }: StudentProfilePageP
 
     return (
       <main className="content">
-        <section className="empty-state">
-          <h1>Aluno indisponivel</h1>
-          <p>{error instanceof Error ? error.message : "Nao foi possivel carregar o aluno."}</p>
-        </section>
+        <ErrorState
+          title="Aluno indisponível"
+          description={
+            error instanceof Error ? error.message : "Não foi possível carregar o aluno."
+          }
+          action={
+            <Link className="button" href="/students">
+              Voltar para alunos
+            </Link>
+          }
+        />
       </main>
     );
   }
+}
+
+function StudentHistory({ events }: { events: StudentAuditEvent[] }) {
+  if (events.length === 0) {
+    return (
+      <EmptyState
+        title="Nenhum evento registrado"
+        description="O histórico seguro deste aluno ainda não possui eventos visíveis no seu escopo."
+      />
+    );
+  }
+
+  return (
+    <Card className="student-history-card">
+      <h2>Histórico seguro</h2>
+      <ol className="student-history">
+        {events.map((event) => (
+          <li key={event.id}>
+            <span className="student-history-marker" aria-hidden="true" />
+            <div>
+              <strong>{auditActionLabel[event.action]}</strong>
+              <span>{formatDateTime(event.occurredAt)}</span>
+              <small>{describeAuditMetadata(event)}</small>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
+
+const auditActionLabel: Record<StudentAuditEvent["action"], string> = {
+  "student.created": "Aluno cadastrado",
+  "student.updated": "Cadastro atualizado",
+  "student.inactivated": "Aluno inativado",
+  "student.reactivated": "Aluno reativado",
+  "student.unit_linked": "Unidade vinculada",
+  "student.unit_unlinked": "Unidade desvinculada"
+};
+
+function describeAuditMetadata(event: StudentAuditEvent): string {
+  if (event.metadata.changedFields) {
+    return `Campos alterados: ${event.metadata.changedFields.join(", ")}`;
+  }
+  if (event.metadata.statusBefore && event.metadata.statusAfter) {
+    return `Status: ${event.metadata.statusBefore} → ${event.metadata.statusAfter}`;
+  }
+  if (event.metadata.unitId) {
+    return `Unidade: ${event.metadata.unitId}`;
+  }
+  if (event.metadata.unitIds) {
+    return `${event.metadata.unitIds.length} unidade(s) vinculada(s) no cadastro`;
+  }
+  return "Evento operacional sem dados pessoais.";
+}
+
+function readTab(value: string | string[] | undefined): "summary" | "units" | "history" {
+  const tab = Array.isArray(value) ? value[0] : value;
+  return tab === "units" || tab === "history" ? tab : "summary";
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(
+    new Date(`${value}T00:00:00.000Z`)
+  );
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo"
+  }).format(new Date(value));
 }

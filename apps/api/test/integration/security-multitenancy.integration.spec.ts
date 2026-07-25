@@ -280,10 +280,9 @@ describe("security and multi-tenancy integration", () => {
       [unitB.id]
     );
     await app.inject({
-      method: "PATCH",
-      url: `/organizations/${organization.organization.id}/students/${inactiveStudent.id}`,
-      headers: authHeaders(ownerUserId),
-      payload: { status: "INACTIVE" }
+      method: "POST",
+      url: `/organizations/${organization.organization.id}/students/${inactiveStudent.id}/inactivate`,
+      headers: authHeaders(ownerUserId)
     });
     await assignScopedStudentManager(
       organization.organization.id,
@@ -320,8 +319,12 @@ describe("security and multi-tenancy integration", () => {
     });
   });
 
-  it("prevents a unit-scoped user from mutating or archiving a shared student", async () => {
-    const organization = await createOrganization(ownerUserId, "student-unit-write-scope");
+  it("prevents a unit-scoped user from mutating a shared student", async () => {
+    const organization = await createOrganization(
+      ownerUserId,
+      "student-unit-write-scope",
+      "NETWORK"
+    );
     const unitB = await createUnit(organization.organization.id, ownerUserId, "UNIT_B");
     const sharedStudent = await createStudent(
       organization.organization.id,
@@ -357,12 +360,12 @@ describe("security and multi-tenancy integration", () => {
     });
     expect(updateResponse.statusCode).toBe(403);
 
-    const archiveResponse = await app.inject({
-      method: "DELETE",
-      url: `/organizations/${organization.organization.id}/students/${sharedStudent.id}`,
+    const lifecycleResponse = await app.inject({
+      method: "POST",
+      url: `/organizations/${organization.organization.id}/students/${sharedStudent.id}/inactivate`,
       headers
     });
-    expect(archiveResponse.statusCode).toBe(403);
+    expect(lifecycleResponse.statusCode).toBe(403);
 
     const createForOtherUnitResponse = await app.inject({
       method: "POST",
@@ -376,8 +379,8 @@ describe("security and multi-tenancy integration", () => {
     expect(createForOtherUnitResponse.statusCode).toBe(403);
 
     const replaceUnitsResponse = await app.inject({
-      method: "PATCH",
-      url: `/organizations/${organization.organization.id}/students/${sharedStudent.id}`,
+      method: "PUT",
+      url: `/organizations/${organization.organization.id}/students/${sharedStudent.id}/units`,
       headers,
       payload: {
         unitIds: [organization.defaultUnit.id]
@@ -428,7 +431,7 @@ describe("security and multi-tenancy integration", () => {
     ).toBe(0);
   });
 
-  it("keeps inactive students searchable and lets a global owner archive them", async () => {
+  it("supports idempotent student lifecycle, safe history and searchable inactive records", async () => {
     const organization = await createOrganization(ownerUserId, "students-crud");
     const student = await createStudent(organization.organization.id, ownerUserId, "Ana Martins", [
       organization.defaultUnit.id
@@ -449,26 +452,28 @@ describe("security and multi-tenancy integration", () => {
     const updateResponse = await app.inject({
       method: "PATCH",
       url: `/organizations/${organization.organization.id}/students/${student.id}`,
-      headers: authHeaders(ownerUserId, organization.defaultUnit.id),
+      headers: authHeaders(ownerUserId),
       payload: {
         name: "Ana Martins Silva",
-        email: "ana@example.test",
-        status: "ACTIVE"
+        email: "  ANA@EXAMPLE.TEST  "
       }
     });
     expect(updateResponse.statusCode).toBe(200);
     expect(studentSchema.parse(JSON.parse(updateResponse.payload)).email).toBe("ana@example.test");
 
     const inactivateResponse = await app.inject({
-      method: "PATCH",
-      url: `/organizations/${organization.organization.id}/students/${student.id}`,
-      headers: authHeaders(ownerUserId, organization.defaultUnit.id),
-      payload: {
-        status: "INACTIVE"
-      }
+      method: "POST",
+      url: `/organizations/${organization.organization.id}/students/${student.id}/inactivate`,
+      headers: authHeaders(ownerUserId)
     });
     expect(inactivateResponse.statusCode).toBe(200);
     expect(studentSchema.parse(JSON.parse(inactivateResponse.payload)).status).toBe("INACTIVE");
+    const repeatedInactivateResponse = await app.inject({
+      method: "POST",
+      url: `/organizations/${organization.organization.id}/students/${student.id}/inactivate`,
+      headers: authHeaders(ownerUserId)
+    });
+    expect(repeatedInactivateResponse.statusCode).toBe(200);
 
     const inactiveListResponse = await app.inject({
       method: "GET",
@@ -490,28 +495,137 @@ describe("security and multi-tenancy integration", () => {
       })
     ).toBe(1);
 
-    const archiveResponse = await app.inject({
-      method: "DELETE",
-      url: `/organizations/${organization.organization.id}/students/${student.id}`,
-      headers: authHeaders(ownerUserId, organization.defaultUnit.id)
-    });
-    expect(archiveResponse.statusCode).toBe(200);
-    expect(studentSchema.parse(JSON.parse(archiveResponse.payload)).status).toBe("INACTIVE");
-
-    const getDeletedResponse = await app.inject({
-      method: "GET",
-      url: `/organizations/${organization.organization.id}/students/${student.id}`,
+    const reactivateResponse = await app.inject({
+      method: "POST",
+      url: `/organizations/${organization.organization.id}/students/${student.id}/reactivate`,
       headers: authHeaders(ownerUserId)
     });
-    expect(getDeletedResponse.statusCode).toBe(404);
+    expect(reactivateResponse.statusCode).toBe(200);
+    expect(studentSchema.parse(JSON.parse(reactivateResponse.payload)).status).toBe("ACTIVE");
+    const repeatedReactivateResponse = await app.inject({
+      method: "POST",
+      url: `/organizations/${organization.organization.id}/students/${student.id}/reactivate`,
+      headers: authHeaders(ownerUserId)
+    });
+    expect(repeatedReactivateResponse.statusCode).toBe(200);
 
-    const auditCount = await prisma.auditLog.count({
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/organizations/${organization.organization.id}/students/${student.id}/history`,
+      headers: authHeaders(ownerUserId)
+    });
+    expect(historyResponse.statusCode).toBe(200);
+    const history = z
+      .array(
+        z.object({
+          id: uuidSchema,
+          action: z.enum([
+            "student.created",
+            "student.updated",
+            "student.inactivated",
+            "student.reactivated",
+            "student.unit_linked",
+            "student.unit_unlinked"
+          ]),
+          occurredAt: z.string().datetime(),
+          metadata: z.record(z.string(), z.unknown())
+        })
+      )
+      .parse(JSON.parse(historyResponse.payload));
+    expect(history.map(({ action }) => action)).toEqual([
+      "student.reactivated",
+      "student.inactivated",
+      "student.updated",
+      "student.created"
+    ]);
+    expect(JSON.stringify(history)).not.toContain("ana@example.test");
+    expect(JSON.stringify(history)).not.toContain("Ana Martins Silva");
+
+    const auditActions = await prisma.auditLog.findMany({
       where: {
         organizationId: organization.organization.id,
-        entity: "Student"
+        entity: "Student",
+        entityId: student.id
+      },
+      select: { action: true, metadata: true },
+      orderBy: { occurredAt: "asc" }
+    });
+    expect(auditActions.map(({ action }) => action)).toEqual([
+      "student.created",
+      "student.updated",
+      "student.inactivated",
+      "student.reactivated"
+    ]);
+    expect(JSON.stringify(auditActions)).not.toContain("ana@example.test");
+    expect(JSON.stringify(auditActions)).not.toContain("Ana Martins Silva");
+  });
+
+  it("filters, sorts and paginates students in the backend", async () => {
+    const organization = await createOrganization(ownerUserId, "students-list");
+    await createStudent(organization.organization.id, ownerUserId, "Bruna Souza", [
+      organization.defaultUnit.id
+    ]);
+    await createStudent(organization.organization.id, ownerUserId, "Alice Lima", [
+      organization.defaultUnit.id
+    ]);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/organizations/${organization.organization.id}/students?page=1&pageSize=1&search=example.test&unitId=${organization.defaultUnit.id}&sortBy=name&sortDirection=asc`,
+      headers: authHeaders(ownerUserId)
+    });
+
+    expect(response.statusCode).toBe(200);
+    const result = paginatedStudentsSchema.parse(JSON.parse(response.payload));
+    expect(result.pagination).toEqual({
+      page: 1,
+      pageSize: 1,
+      total: 2,
+      totalPages: 2
+    });
+    expect(result.data.map(({ name }) => name)).toEqual(["Alice Lima"]);
+  });
+
+  it("enforces unit policy for PERSONAL, GYM and NETWORK organizations", async () => {
+    const personal = await createOrganization(ownerUserId, "student-personal", "PERSONAL");
+    const gym = await createOrganization(secondUserId, "student-gym", "GYM");
+    const network = await createOrganization(limitedUserId, "student-network", "NETWORK");
+    const gymExtraUnit = await createUnit(gym.organization.id, secondUserId, "GYM_EXTRA");
+    const networkExtraUnit = await createUnit(
+      network.organization.id,
+      limitedUserId,
+      "NETWORK_EXTRA"
+    );
+
+    const personalResponse = await app.inject({
+      method: "POST",
+      url: `/organizations/${personal.organization.id}/students`,
+      headers: authHeaders(ownerUserId),
+      payload: { name: "Personal principal", unitIds: [personal.defaultUnit.id] }
+    });
+    expect(personalResponse.statusCode).toBe(201);
+
+    const gymResponse = await app.inject({
+      method: "POST",
+      url: `/organizations/${gym.organization.id}/students`,
+      headers: authHeaders(secondUserId),
+      payload: {
+        name: "Academia invalida",
+        unitIds: [gym.defaultUnit.id, gymExtraUnit.id]
       }
     });
-    expect(auditCount).toBe(4);
+    expect(gymResponse.statusCode).toBe(400);
+
+    const networkResponse = await app.inject({
+      method: "POST",
+      url: `/organizations/${network.organization.id}/students`,
+      headers: authHeaders(limitedUserId),
+      payload: {
+        name: "Rede multiunidade",
+        unitIds: [network.defaultUnit.id, networkExtraUnit.id]
+      }
+    });
+    expect(networkResponse.statusCode).toBe(201);
   });
 
   it("enforces RBAC for student management", async () => {
@@ -534,6 +648,76 @@ describe("security and multi-tenancy integration", () => {
       }
     });
     expect(createResponse.statusCode).toBe(403);
+  });
+
+  it("enforces the student management entitlement for write operations", async () => {
+    const organization = await createOrganization(ownerUserId, "students-entitlement");
+    const { plan } = await createPlanFeature("students.manage", false, null);
+    await createSubscription(
+      organization.organization.id,
+      plan.id,
+      "ACTIVE",
+      daysFromNow(-1),
+      null
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/organizations/${organization.organization.id}/students`,
+      headers: authHeaders(ownerUserId),
+      payload: {
+        name: "Aluno bloqueado pelo plano",
+        unitIds: [organization.defaultUnit.id]
+      }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(
+      await prisma.student.count({ where: { organizationId: organization.organization.id } })
+    ).toBe(0);
+  });
+
+  it("links and unlinks network units idempotently with one safe audit per change", async () => {
+    const organization = await createOrganization(ownerUserId, "student-unit-lifecycle", "NETWORK");
+    const unitB = await createUnit(organization.organization.id, ownerUserId, "NETWORK_B");
+    const student = await createStudent(
+      organization.organization.id,
+      ownerUserId,
+      "Aluno em rede",
+      [organization.defaultUnit.id]
+    );
+    const url = `/organizations/${organization.organization.id}/students/${student.id}/units`;
+
+    for (const unitIds of [
+      [organization.defaultUnit.id, unitB.id],
+      [organization.defaultUnit.id, unitB.id],
+      [unitB.id]
+    ]) {
+      const response = await app.inject({
+        method: "PUT",
+        url,
+        headers: authHeaders(ownerUserId),
+        payload: { unitIds }
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const studentUnitActions = await prisma.auditLog.findMany({
+      where: {
+        organizationId: organization.organization.id,
+        entityId: student.id,
+        action: { in: ["student.unit_linked", "student.unit_unlinked"] }
+      },
+      select: { action: true, metadata: true },
+      orderBy: { occurredAt: "asc" }
+    });
+    expect(studentUnitActions).toEqual([
+      { action: "student.unit_linked", metadata: { unitId: unitB.id } },
+      {
+        action: "student.unit_unlinked",
+        metadata: { unitId: organization.defaultUnit.id }
+      }
+    ]);
   });
 
   it("prevents a user from Organization A reading a student from Organization B", async () => {
@@ -739,13 +923,17 @@ describe("security and multi-tenancy integration", () => {
     });
   }
 
-  async function createOrganization(userId: string, slug: string) {
+  async function createOrganization(
+    userId: string,
+    slug: string,
+    type: "PERSONAL" | "GYM" | "NETWORK" = "GYM"
+  ) {
     const response = await app.inject({
       method: "POST",
       url: "/organizations",
       headers: authHeaders(userId),
       payload: {
-        type: "GYM",
+        type,
         legalName: slug,
         slug
       }

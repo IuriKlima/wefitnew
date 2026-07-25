@@ -310,7 +310,11 @@
   background: var(--wf-color-surface);
   border: 1px solid var(--wf-color-border);
   border-radius: var(--wf-radius-lg);
+  contain: layout inline-size;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  width: 100%;
 }
 
 .wf-data-table table {

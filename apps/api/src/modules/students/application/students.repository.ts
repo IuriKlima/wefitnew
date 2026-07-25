@@ -1,10 +1,20 @@
 import { Inject, Injectable } from "@nestjs/common";
 
-import type { PaginatedStudents, Student, StudentDashboardSummary } from "@gym-platform/contracts";
+import type {
+  AccountOrganizationType,
+  PaginatedStudents,
+  Student,
+  StudentAuditAction,
+  StudentAuditEvent,
+  StudentAuditMetadata,
+  StudentDashboardSummary,
+  StudentStatus
+} from "@gym-platform/contracts";
 import { Prisma } from "@gym-platform/database";
 import type {
   CreateStudentInput,
   ListStudentsQueryInput,
+  ReplaceStudentUnitsInput,
   UpdateStudentInput
 } from "@gym-platform/validation";
 
@@ -44,7 +54,7 @@ export class StudentsRepository {
     await this.assertOrganizationExists(transaction, input.organizationId);
     await this.assertUserExists(transaction, input.userId);
     const unitIds = uniqueIds(input.unitIds);
-    await this.assertUnitsBelongToOrganization(transaction, input.organizationId, unitIds);
+    await this.assertStudentUnitPolicy(transaction, input.organizationId, unitIds);
 
     const student = await transaction.student.create({
       data: {
@@ -78,7 +88,7 @@ export class StudentsRepository {
       entityId: student.id,
       correlationId,
       metadata: {
-        status: input.status,
+        statusAfter: input.status,
         unitIds
       }
     });
@@ -94,21 +104,15 @@ export class StudentsRepository {
   ): Promise<PaginatedStudents> {
     const where = buildStudentWhere(organizationId, query, unitId);
     const skip = (query.page - 1) * query.pageSize;
-    const include = buildStudentInclude(unitId);
+    const effectiveUnitId = unitId ?? query.unitId;
+    const include = buildStudentInclude(effectiveUnitId);
 
     const [total, students] = await Promise.all([
       transaction.student.count({ where }),
       transaction.student.findMany({
         where,
         include,
-        orderBy: [
-          {
-            name: "asc"
-          },
-          {
-            createdAt: "desc"
-          }
-        ],
+        orderBy: buildStudentOrderBy(query),
         skip,
         take: query.pageSize
       })
@@ -144,7 +148,9 @@ export class StudentsRepository {
       organizationId,
       {
         page: 1,
-        pageSize: 1
+        pageSize: 1,
+        sortBy: "createdAt",
+        sortDirection: "desc"
       },
       unitId
     );
@@ -193,7 +199,7 @@ export class StudentsRepository {
     const currentStudent = await this.findForOrganization(transaction, organizationId, studentId);
     await this.assertUserExists(transaction, input.userId);
 
-    const data = buildStudentUpdateData(input);
+    const data = buildStudentUpdateData(input, currentStudent);
     const changedFields = Object.keys(data);
 
     if (changedFields.length > 0) {
@@ -206,60 +212,34 @@ export class StudentsRepository {
         },
         data
       });
-    }
-
-    if (input.unitIds !== undefined) {
-      const unitIds = uniqueIds(input.unitIds);
-      await this.assertUnitsBelongToOrganization(transaction, organizationId, unitIds);
-
-      await transaction.studentUnit.updateMany({
-        where: {
-          organizationId,
-          studentId,
-          deletedAt: null
-        },
-        data: {
-          deletedAt: new Date()
+      await this.auditService.record(transaction, {
+        organizationId,
+        actorUserId,
+        action: "student.updated",
+        entity: "Student",
+        entityId: studentId,
+        correlationId,
+        metadata: {
+          changedFields
         }
       });
-
-      if (unitIds.length > 0) {
-        await transaction.studentUnit.createMany({
-          data: unitIds.map((selectedUnitId) => ({
-            organizationId,
-            studentId,
-            unitId: selectedUnitId
-          }))
-        });
-      }
-
-      changedFields.push("unitIds");
     }
-
-    await this.auditService.record(transaction, {
-      organizationId,
-      actorUserId,
-      action: resolveStudentUpdateAction(currentStudent.status, input.status),
-      entity: "Student",
-      entityId: studentId,
-      correlationId,
-      metadata: {
-        changedFields
-      }
-    });
 
     return this.findForOrganization(transaction, organizationId, studentId);
   }
 
-  async archive(
+  async setStatus(
     transaction: Prisma.TransactionClient,
     organizationId: string,
     studentId: string,
+    status: StudentStatus,
     actorUserId: string,
     correlationId: string
   ): Promise<Student> {
-    await this.findForOrganization(transaction, organizationId, studentId);
-    const deletedAt = new Date();
+    const currentStudent = await this.findForOrganization(transaction, organizationId, studentId);
+    if (currentStudent.status === status) {
+      return currentStudent;
+    }
 
     await transaction.student.update({
       where: {
@@ -269,42 +249,142 @@ export class StudentsRepository {
         }
       },
       data: {
-        status: "INACTIVE",
-        deletedAt
-      }
-    });
-
-    await transaction.studentUnit.updateMany({
-      where: {
-        organizationId,
-        studentId,
-        deletedAt: null
-      },
-      data: {
-        deletedAt
+        status
       }
     });
 
     await this.auditService.record(transaction, {
       organizationId,
       actorUserId,
-      action: "student.archived",
+      action: status === "ACTIVE" ? "student.reactivated" : "student.inactivated",
       entity: "Student",
       entityId: studentId,
-      correlationId
+      correlationId,
+      metadata: {
+        statusBefore: currentStudent.status,
+        statusAfter: status
+      }
     });
 
-    const student = await transaction.student.findUniqueOrThrow({
-      where: {
-        organizationId_id: {
+    return this.findForOrganization(transaction, organizationId, studentId);
+  }
+
+  async replaceUnits(
+    transaction: Prisma.TransactionClient,
+    organizationId: string,
+    studentId: string,
+    input: ReplaceStudentUnitsInput,
+    actorUserId: string,
+    correlationId: string
+  ): Promise<Student> {
+    const currentStudent = await this.findForOrganization(transaction, organizationId, studentId);
+    const unitIds = uniqueIds(input.unitIds);
+    await this.assertStudentUnitPolicy(transaction, organizationId, unitIds);
+
+    const currentUnitIds = new Set(currentStudent.units.map((unit) => unit.id));
+    const nextUnitIds = new Set(unitIds);
+    const linkedUnitIds = unitIds.filter((unitId) => !currentUnitIds.has(unitId));
+    const unlinkedUnitIds = [...currentUnitIds].filter((unitId) => !nextUnitIds.has(unitId));
+
+    if (linkedUnitIds.length === 0 && unlinkedUnitIds.length === 0) {
+      return currentStudent;
+    }
+
+    if (unlinkedUnitIds.length > 0) {
+      await transaction.studentUnit.updateMany({
+        where: {
           organizationId,
-          id: studentId
+          studentId,
+          unitId: {
+            in: unlinkedUnitIds
+          },
+          deletedAt: null
+        },
+        data: {
+          deletedAt: new Date()
+        }
+      });
+    }
+
+    if (linkedUnitIds.length > 0) {
+      await transaction.studentUnit.createMany({
+        data: linkedUnitIds.map((unitId) => ({
+          organizationId,
+          studentId,
+          unitId
+        }))
+      });
+    }
+
+    for (const unitId of linkedUnitIds) {
+      await this.recordUnitAudit(
+        transaction,
+        organizationId,
+        studentId,
+        unitId,
+        "student.unit_linked",
+        actorUserId,
+        correlationId
+      );
+    }
+    for (const unitId of unlinkedUnitIds) {
+      await this.recordUnitAudit(
+        transaction,
+        organizationId,
+        studentId,
+        unitId,
+        "student.unit_unlinked",
+        actorUserId,
+        correlationId
+      );
+    }
+
+    return this.findForOrganization(transaction, organizationId, studentId);
+  }
+
+  async listHistory(
+    transaction: Prisma.TransactionClient,
+    organizationId: string,
+    studentId: string,
+    unitId?: string
+  ): Promise<StudentAuditEvent[]> {
+    await this.findForOrganization(transaction, organizationId, studentId, unitId);
+
+    const events = await transaction.auditLog.findMany({
+      where: {
+        organizationId,
+        entity: "Student",
+        entityId: studentId,
+        action: {
+          in: [...studentAuditActions]
         }
       },
-      include: buildStudentInclude()
+      select: {
+        id: true,
+        action: true,
+        occurredAt: true,
+        metadata: true
+      },
+      orderBy: {
+        occurredAt: "desc"
+      },
+      take: 100
     });
 
-    return toStudent(student);
+    return events.flatMap((event) => {
+      if (!isStudentAuditAction(event.action)) {
+        return [];
+      }
+
+      return [
+        {
+          id: event.id,
+          action: event.action,
+          occurredAt: event.occurredAt.toISOString(),
+          metadata: sanitizeStudentAuditMetadata(event.action, event.metadata)
+        }
+      ];
+    });
   }
 
   private async findForOrganization(
@@ -367,27 +447,39 @@ export class StudentsRepository {
     }
   }
 
-  private async assertUnitsBelongToOrganization(
+  private async assertStudentUnitPolicy(
     client: PrismaClientLike,
     organizationId: string,
     unitIds: string[]
   ): Promise<void> {
-    if (unitIds.length === 0) {
-      return;
-    }
-
-    const units = await client.unit.findMany({
-      where: {
-        organizationId,
-        id: {
-          in: unitIds
+    const [organization, units] = await Promise.all([
+      client.organization.findFirst({
+        where: {
+          id: organizationId,
+          deletedAt: null
         },
-        deletedAt: null
-      },
-      select: {
-        id: true
-      }
-    });
+        select: {
+          type: true
+        }
+      }),
+      client.unit.findMany({
+        where: {
+          organizationId,
+          id: {
+            in: unitIds
+          },
+          deletedAt: null
+        },
+        select: {
+          id: true,
+          code: true
+        }
+      })
+    ]);
+
+    if (!organization) {
+      throw new DomainError("Organization not found.", "ORGANIZATION_NOT_FOUND", 404);
+    }
 
     if (units.length !== unitIds.length) {
       throw new DomainError(
@@ -396,6 +488,31 @@ export class StudentsRepository {
         404
       );
     }
+
+    assertUnitCountForOrganizationType(organization.type, units);
+  }
+
+  private recordUnitAudit(
+    transaction: Prisma.TransactionClient,
+    organizationId: string,
+    studentId: string,
+    unitId: string,
+    action: "student.unit_linked" | "student.unit_unlinked",
+    actorUserId: string,
+    correlationId: string
+  ): Promise<void> {
+    return this.auditService.record(transaction, {
+      organizationId,
+      unitId,
+      actorUserId,
+      action,
+      entity: "Student",
+      entityId: studentId,
+      correlationId,
+      metadata: {
+        unitId
+      }
+    });
   }
 }
 
@@ -444,15 +561,16 @@ function buildStudentWhere(
   query: ListStudentsQueryInput,
   unitId?: string
 ): Prisma.StudentWhereInput {
+  const effectiveUnitId = unitId ?? query.unitId;
   const where: Prisma.StudentWhereInput = {
     organizationId,
     deletedAt: null,
-    ...(unitId
+    ...(effectiveUnitId
       ? {
           unitLinks: {
             some: {
               organizationId,
-              unitId,
+              unitId: effectiveUnitId,
               deletedAt: null
             }
           }
@@ -476,10 +594,23 @@ function buildStudentWhere(
   return where;
 }
 
-function buildStudentUpdateData(input: UpdateStudentInput): Prisma.StudentUpdateInput {
+function buildStudentOrderBy(
+  query: ListStudentsQueryInput
+): Prisma.StudentOrderByWithRelationInput[] {
+  const primary = {
+    [query.sortBy]: query.sortDirection
+  } as Prisma.StudentOrderByWithRelationInput;
+
+  return [primary, ...(query.sortBy === "name" ? [] : [{ name: "asc" as const }]), { id: "asc" }];
+}
+
+function buildStudentUpdateData(
+  input: UpdateStudentInput,
+  currentStudent: Student
+): Prisma.StudentUpdateInput {
   const data: Prisma.StudentUpdateInput = {};
 
-  if (input.userId !== undefined) {
+  if (input.userId !== undefined && input.userId !== currentStudent.userId) {
     data.user = input.userId
       ? {
           connect: {
@@ -491,32 +622,31 @@ function buildStudentUpdateData(input: UpdateStudentInput): Prisma.StudentUpdate
         };
   }
 
-  if (input.name !== undefined) {
+  if (input.name !== undefined && input.name !== currentStudent.name) {
     data.name = input.name;
   }
 
-  if (input.socialName !== undefined) {
+  if (input.socialName !== undefined && input.socialName !== currentStudent.socialName) {
     data.socialName = input.socialName;
   }
 
-  if (input.email !== undefined) {
+  if (input.email !== undefined && input.email !== currentStudent.email) {
     data.email = input.email;
   }
 
-  if (input.phone !== undefined) {
+  if (input.phone !== undefined && input.phone !== currentStudent.phone) {
     data.phone = input.phone;
   }
 
-  if (input.birthDate !== undefined) {
+  if (input.birthDate !== undefined && input.birthDate !== currentStudent.birthDate) {
     data.birthDate = input.birthDate === null ? null : toBirthDate(input.birthDate);
   }
 
-  if (input.operationalNote !== undefined) {
+  if (
+    input.operationalNote !== undefined &&
+    input.operationalNote !== currentStudent.operationalNote
+  ) {
     data.operationalNote = input.operationalNote;
-  }
-
-  if (input.status !== undefined) {
-    data.status = input.status;
   }
 
   return data;
@@ -524,21 +654,6 @@ function buildStudentUpdateData(input: UpdateStudentInput): Prisma.StudentUpdate
 
 function uniqueIds(ids: string[]): string[] {
   return [...new Set(ids)];
-}
-
-function resolveStudentUpdateAction(
-  currentStatus: Student["status"],
-  nextStatus: UpdateStudentInput["status"]
-): string {
-  if (nextStatus === "INACTIVE" && currentStatus !== nextStatus) {
-    return "student.inactivated";
-  }
-
-  if (nextStatus === "ACTIVE" && currentStatus !== nextStatus) {
-    return "student.reactivated";
-  }
-
-  return "student.updated";
 }
 
 function toBirthDate(value: string): Date {
@@ -565,4 +680,94 @@ function toStudent(student: StudentWithUnits): Student {
       code: link.unit.code
     }))
   };
+}
+
+function assertUnitCountForOrganizationType(
+  organizationType: AccountOrganizationType,
+  units: Array<{ id: string; code: string | null }>
+): void {
+  if (organizationType === "PERSONAL") {
+    if (units.length !== 1 || units[0]?.code !== "MAIN") {
+      throw new DomainError(
+        "Personal organizations require the main unit.",
+        "STUDENT_UNIT_POLICY_VIOLATION",
+        400
+      );
+    }
+    return;
+  }
+
+  if (organizationType === "GYM" && units.length !== 1) {
+    throw new DomainError(
+      "Gym organizations require exactly one operational unit.",
+      "STUDENT_UNIT_POLICY_VIOLATION",
+      400
+    );
+  }
+
+  if (organizationType === "NETWORK" && units.length < 1) {
+    throw new DomainError(
+      "Network organizations require at least one unit.",
+      "STUDENT_UNIT_POLICY_VIOLATION",
+      400
+    );
+  }
+}
+
+const studentAuditActions = [
+  "student.created",
+  "student.updated",
+  "student.inactivated",
+  "student.reactivated",
+  "student.unit_linked",
+  "student.unit_unlinked"
+] as const satisfies readonly StudentAuditAction[];
+
+function isStudentAuditAction(action: string): action is StudentAuditAction {
+  return (studentAuditActions as readonly string[]).includes(action);
+}
+
+function sanitizeStudentAuditMetadata(
+  action: StudentAuditAction,
+  metadata: unknown
+): StudentAuditMetadata {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+
+  const value = metadata as Record<string, unknown>;
+  if (action === "student.created") {
+    const statusAfter = readStudentStatus(value.statusAfter);
+    const unitIds = readStringArray(value.unitIds);
+    return {
+      ...(statusAfter ? { statusAfter } : {}),
+      ...(unitIds ? { unitIds } : {})
+    };
+  }
+
+  if (action === "student.updated") {
+    const changedFields = readStringArray(value.changedFields);
+    return changedFields ? { changedFields } : {};
+  }
+
+  if (action === "student.inactivated" || action === "student.reactivated") {
+    const statusBefore = readStudentStatus(value.statusBefore);
+    const statusAfter = readStudentStatus(value.statusAfter);
+    return {
+      ...(statusBefore ? { statusBefore } : {}),
+      ...(statusAfter ? { statusAfter } : {})
+    };
+  }
+
+  return typeof value.unitId === "string" ? { unitId: value.unitId } : {};
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every((item) => typeof item === "string")
+    ? value
+    : undefined;
+}
+
+function readStudentStatus(value: unknown): StudentStatus | undefined {
+  return value === "ACTIVE" || value === "INACTIVE" ? value : undefined;
 }
