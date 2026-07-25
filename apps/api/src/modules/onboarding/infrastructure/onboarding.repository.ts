@@ -1,7 +1,10 @@
 import { Inject, Injectable } from "@nestjs/common";
 
 import type { AuthenticatedActor } from "@gym-platform/auth";
-import type { OrganizationOnboardingView } from "@gym-platform/contracts";
+import {
+  isOnboardingPlanCompatible,
+  type OrganizationOnboardingView
+} from "@gym-platform/contracts";
 import { Prisma } from "@gym-platform/database";
 import {
   completeOnboardingPayloadSchema,
@@ -11,6 +14,7 @@ import {
   type OnboardingBusinessTypeInput,
   type OnboardingCompanyInput,
   type OnboardingOperationInput,
+  type OnboardingPayload,
   type OnboardingPlanInput,
   type OnboardingResponsibleInput,
   type OnboardingUnitInput
@@ -37,6 +41,12 @@ type StepInput =
   | OnboardingResponsibleInput
   | OnboardingOperationInput
   | OnboardingPlanInput;
+
+type StepPayload = StepInput extends infer TInput
+  ? TInput extends { version: number }
+    ? Omit<TInput, "version">
+    : never
+  : never;
 
 @Injectable()
 export class OnboardingRepository {
@@ -71,6 +81,52 @@ export class OnboardingRepository {
     );
   }
 
+  resume(actorUserId: string, correlationId: string) {
+    return this.requireCurrentOnboarding(actorUserId, correlationId, async (tx, scope) => {
+      const current = await this.readRecord(tx, scope);
+      if (current.status !== "CANCELED") {
+        return this.readView(tx, scope);
+      }
+
+      const result = await tx.organizationOnboarding.updateMany({
+        where: {
+          id: scope.onboardingId,
+          organizationId: scope.organizationId,
+          status: "CANCELED",
+          deletedAt: null,
+          version: current.version
+        },
+        data: {
+          status: "IN_PROGRESS",
+          version: { increment: 1 }
+        }
+      });
+
+      if (result.count === 0) {
+        const concurrent = await this.readRecord(tx, scope);
+        if (concurrent.status === "IN_PROGRESS") {
+          return this.readView(tx, scope);
+        }
+        assertOptimisticUpdate(result.count);
+      }
+
+      await this.auditService.record(tx, {
+        organizationId: scope.organizationId,
+        actorUserId,
+        action: "onboarding.resumed",
+        entity: "OrganizationOnboarding",
+        entityId: scope.onboardingId,
+        correlationId,
+        metadata: {
+          resumedFrom: "CANCELED",
+          version: current.version + 1
+        }
+      });
+
+      return this.readView(tx, scope);
+    });
+  }
+
   updateStep(
     actorUserId: string,
     correlationId: string,
@@ -89,12 +145,29 @@ export class OnboardingRepository {
       }
 
       const { version, ...stepPayload } = input;
+      const validatedStepPayload = stepPayload as StepPayload;
       const currentPayload = onboardingPayloadSchema.parse(current.payload);
+      await this.assertStepBusinessRules(
+        tx,
+        actorUserId,
+        step.key,
+        validatedStepPayload,
+        currentPayload
+      );
+      const invalidatesPlan =
+        step.key === "businessType" &&
+        currentPayload.plan !== undefined &&
+        "type" in validatedStepPayload &&
+        !isOnboardingPlanCompatible(
+          validatedStepPayload.type,
+          currentPayload.plan.selectedPlanCode
+        );
+      const payloadBase = invalidatesPlan ? removePlanAndReview(currentPayload) : currentPayload;
       const payload = onboardingPayloadSchema.parse({
-        ...currentPayload,
-        [step.key]: stepPayload
+        ...payloadBase,
+        [step.key]: validatedStepPayload
       });
-      const nextStep = Math.max(current.currentStep, step.number + 1);
+      const nextStep = invalidatesPlan ? 6 : Math.max(current.currentStep, step.number + 1);
 
       const result = await tx.organizationOnboarding.updateMany({
         where: {
@@ -107,9 +180,11 @@ export class OnboardingRepository {
         data: {
           currentStep: nextStep,
           payload: payload as Prisma.InputJsonValue,
-          ...(step.key === "plan" && "selectedPlanCode" in stepPayload
-            ? { selectedPlanCode: stepPayload.selectedPlanCode }
-            : {}),
+          ...(step.key === "plan" && "selectedPlanCode" in validatedStepPayload
+            ? { selectedPlanCode: validatedStepPayload.selectedPlanCode }
+            : invalidatesPlan
+              ? { selectedPlanCode: null }
+              : {}),
           version: { increment: 1 }
         }
       });
@@ -340,6 +415,45 @@ export class OnboardingRepository {
     return onboarding;
   }
 
+  private async assertStepBusinessRules(
+    tx: Prisma.TransactionClient,
+    actorUserId: string,
+    stepKey: StepKey,
+    stepPayload: StepPayload,
+    currentPayload: OnboardingPayload
+  ): Promise<void> {
+    if (stepKey === "plan" && "selectedPlanCode" in stepPayload) {
+      const businessType = currentPayload.businessType?.type;
+      if (
+        !businessType ||
+        !isOnboardingPlanCompatible(businessType, stepPayload.selectedPlanCode)
+      ) {
+        throw new DomainError(
+          "O plano selecionado nao e compativel com o tipo de negocio.",
+          "ONBOARDING_PLAN_INCOMPATIBLE",
+          400
+        );
+      }
+    }
+
+    if (stepKey === "responsible" && "email" in stepPayload) {
+      const authenticatedUser = await tx.user.findFirst({
+        where: { id: actorUserId, deletedAt: null },
+        select: { email: true }
+      });
+      if (
+        !authenticatedUser ||
+        authenticatedUser.email.trim().toLowerCase() !== stepPayload.email.trim().toLowerCase()
+      ) {
+        throw new DomainError(
+          "O e-mail do responsavel deve ser o e-mail da identidade autenticada.",
+          "ONBOARDING_RESPONSIBLE_IDENTITY_MISMATCH",
+          400
+        );
+      }
+    }
+  }
+
   private async readView(
     tx: Prisma.TransactionClient,
     scope: OnboardingScopeRow
@@ -389,6 +503,11 @@ export class OnboardingRepository {
       unit
     };
   }
+}
+
+function removePlanAndReview(payload: OnboardingPayload): OnboardingPayload {
+  const { plan: _plan, review: _review, ...remainingPayload } = payload;
+  return remainingPayload;
 }
 
 function assertInProgress(status: OnboardingStatusValue): void {

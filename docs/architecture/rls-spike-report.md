@@ -152,11 +152,10 @@ O harness compara FK composta para linha oculta e inexistente, unicidade ativa d
 unique global auxiliar e primary key. O PostgreSQL pode revelar internamente SQLSTATE, constraint
 e valores mesmo quando RLS oculta a linha.
 
-O filtro HTTP atual da API responde erro nao tratado como `INTERNAL_SERVER_ERROR`, o que evita
-expor detalhes ao cliente. Entretanto, o log atual inclui `exception.message`; uma mensagem Prisma
-de constraint pode carregar nomes ou valores e a sanitizacao por chave nao garante remocao desse
-texto. Antes de RLS real, deve existir mapeamento explicito de erros Prisma/PostgreSQL e log sem
-detalhes de constraint cross-tenant.
+O filtro HTTP da API responde erro nao tratado como `INTERNAL_SERVER_ERROR` e registra somente uma
+mensagem segura para falhas 5xx. Mensagens arbitrarias de `Error` e detalhes Prisma/PostgreSQL nao
+sao copiados para o log; um teste unitario cobre constraint, e-mail e token presentes na excecao.
+Erros de dominio conhecidos continuam sendo mapeados explicitamente sem payload completo.
 
 ## Matriz de testes
 
@@ -239,7 +238,8 @@ em schemas reais, pois a limpeza autorizada para esta tarefa remove somente o sc
 
 1. Custom GUC nao e uma fronteira contra SQL injection; SQL arbitrario pode trocar o contexto (comprovado pelo harness).
 2. Constraints podem revelar existencia internamente, especialmente unique e primary key (confirmado pelo harness).
-3. Logs da API precisam de normalizacao explícita para erros Prisma/PostgreSQL. Implementamos parse heurístico (`databaseErrorDetails`) para contornar limitações do `PrismaClientUnknownRequestError` com constraints diferidas, mas isso exige atenção na API real.
+3. A normalizacao de logs da API cobre o caminho HTTP 5xx, mas precisa ser revalidada junto aos
+   exporters e coletores reais de staging para impedir enriquecimento com a excecao original.
 4. O dataset reduzido nao representa custo de policy em producao.
 5. O spike usou `SET LOCAL ROLE` e provou a robustez lógica local.
 
@@ -259,3 +259,26 @@ Documentamos explicitamente que a aprovação deste spike **não substitui**:
 ## Proximo passo recomendado
 
 Revisar o código do spike em Pull Request, validar o relatório final com arquitetura e segurança e, quando aprovado, iniciar a modelagem gradual das policies reais nos artefatos definitivos, com métricas de performance no staging. Nao criar migration RLS real neste Pull Request.
+
+## Revalidacao do Gate da fundacao — 2026-07-25
+
+Esta tarefa nao criou migration nem alterou policy, grant, role ou funcao `SECURITY DEFINER`. As
+correcoes de retomada usam a policy existente de `OrganizationOnboarding` e o tenant ja resolvido
+pelo backend.
+
+O resultado historico de 50/50 permanece como evidencia da execucao anterior, mas nao foi
+reclassificado como execucao atual. Nesta estacao, o Docker Desktop nao iniciou, a porta
+PostgreSQL de teste `55432` permaneceu indisponivel e o Redis aceitou TCP sem responder a `PING`.
+Assim, `test:integration`, `test:rls-spike` e o teste Redis real ficaram bloqueados.
+
+| Risco                                           | Impacto                                           | Mitigacao                                                                    | Evidencia atual                                                 | Decisao necessaria                              | Bloqueia o gate?                                   |
+| ----------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------- |
+| Runtime de staging com privilegio elevado       | Bypass total de RLS                               | Validar `rolsuper`, `rolbypassrls`, ownership e memberships com a DSN real   | Testes locais restritos existem, mas nao rodaram nesta estacao  | Aprovacao de seguranca apos execucao em staging | Sim                                                |
+| Policies/grants divergirem do catalogo esperado | Acesso cruzado ou indisponibilidade               | Executar migrations e consultas de catalogo em PostgreSQL de teste e staging | Execucao atual bloqueada por Docker/PostgreSQL                  | Repetir suites de integracao e RLS              | Sim                                                |
+| Redis indisponivel em ambiente distribuido      | Negacao de servico; fallback poderia gerar bypass | Producao exige Redis e nao faz fallback para memoria                         | Configuracao e testes unitarios aprovados; teste real bloqueado | Validar Redis gerenciado/staging                | Sim                                                |
+| Mensagem de constraint em logs                  | Exposicao de metadados ou valores                 | Normalizar erros Prisma/PostgreSQL antes do log                              | Teste unitario garante que constraint e e-mail nao aparecem     | Revisar observabilidade em staging              | Nao, apos validacao estatica                       |
+| Custo de policies com volume real               | Regressao de latencia e pool                      | Benchmark com dados representativos e `pg_stat_statements`                   | Continua sem baseline de staging                                | Definir SLO e executar benchmark                | Sim para producao; nao para desenvolvimento do CRM |
+
+Recomendacao desta revalidacao: **o Gate da fundacao permanece condicionado**. O codigo pode seguir
+para revisao, mas o CRM de alunos nao deve iniciar ate PostgreSQL, Redis, RLS e isolamento serem
+reexecutados com sucesso no ambiente de teste e a postura do runtime ser validada em staging.

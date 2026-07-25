@@ -20,13 +20,21 @@ const baseEnvSchema = z.object({
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error"]).default("info")
 });
 
+const redisUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => ["redis:", "rediss:"].includes(new URL(value).protocol), {
+    message: "REDIS_URL must use redis:// or rediss://."
+  });
+
 export const apiEnvSchema = baseEnvSchema
   .extend({
     PORT: z.coerce.number().int().positive().default(3333),
     API_HOST: z.string().min(1).default("0.0.0.0"),
     DATABASE_URL: z.string().min(1),
     DIRECT_URL: z.string().min(1).optional(),
-    REDIS_URL: z.string().min(1),
+    REDIS_URL: redisUrlSchema.optional(),
+    RATE_LIMIT_STORE: z.enum(["memory", "redis"]).optional(),
     CORS_ORIGINS: z.string().min(1).default("http://localhost:3000"),
     SWAGGER_ENABLED: optionalBooleanFromString,
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
@@ -40,7 +48,8 @@ export const apiEnvSchema = baseEnvSchema
   .transform((env) => ({
     ...env,
     SWAGGER_ENABLED: env.SWAGGER_ENABLED ?? env.NODE_ENV !== "production",
-    ORGANIZATION_SELF_SERVICE_ENABLED: env.ORGANIZATION_SELF_SERVICE_ENABLED ?? false
+    ORGANIZATION_SELF_SERVICE_ENABLED: env.ORGANIZATION_SELF_SERVICE_ENABLED ?? false,
+    RATE_LIMIT_STORE: env.RATE_LIMIT_STORE ?? (env.REDIS_URL ? "redis" : "memory")
   }))
   .superRefine((env, context) => {
     if (env.NODE_ENV === "production" && env.AUTH_ADAPTER === "temporary-header") {
@@ -56,6 +65,22 @@ export const apiEnvSchema = baseEnvSchema
         code: z.ZodIssueCode.custom,
         path: ["ORGANIZATION_SELF_SERVICE_ENABLED"],
         message: "Organization self-service cannot be enabled in production."
+      });
+    }
+
+    if (env.NODE_ENV === "production" && env.RATE_LIMIT_STORE !== "redis") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["RATE_LIMIT_STORE"],
+        message: "Production rate limiting must use Redis."
+      });
+    }
+
+    if (env.RATE_LIMIT_STORE === "redis" && !env.REDIS_URL) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["REDIS_URL"],
+        message: "REDIS_URL is required when RATE_LIMIT_STORE=redis."
       });
     }
 
@@ -83,13 +108,6 @@ export const apiEnvSchema = baseEnvSchema
         message: "CORS wildcard is not allowed when credentials are enabled."
       });
     }
-  });
-
-const redisUrlSchema = z
-  .string()
-  .url()
-  .refine((value) => ["redis:", "rediss:"].includes(new URL(value).protocol), {
-    message: "REDIS_URL must use redis:// or rediss://."
   });
 
 export const workerEnvSchema = baseEnvSchema.extend({

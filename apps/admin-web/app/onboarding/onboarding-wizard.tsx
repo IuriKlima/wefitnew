@@ -7,7 +7,7 @@ import type {
   OrganizationOnboardingPayload,
   OrganizationOnboardingView
 } from "@gym-platform/contracts";
-import { onboardingPlans } from "@gym-platform/contracts";
+import { isOnboardingPlanCompatible, onboardingPlans } from "@gym-platform/contracts";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
@@ -24,7 +24,7 @@ export const wizardSteps = [
   "Seu negocio",
   "Dados da empresa",
   "Unidade principal",
-  "Responsavel",
+  "Responsavel da conta",
   "Operacao",
   "Plano Wefit",
   "Revisao"
@@ -105,12 +105,32 @@ export function OnboardingWizard({ initialOnboarding, selfServiceEnabled }: Onbo
   if (onboarding.status === "CANCELED") {
     return (
       <section className="onboarding-start" aria-labelledby="onboarding-canceled-title">
-        <span className="eyebrow">Configuracao encerrada</span>
-        <h1 id="onboarding-canceled-title">Este onboarding foi cancelado</h1>
+        <span className="eyebrow">Progresso preservado</span>
+        <h1 id="onboarding-canceled-title">Continue de onde parou</h1>
         <p>
-          A organizacao provisoria permanece isolada e nao pode acessar os modulos operacionais.
-          Entre em contato com o suporte para revisar a conta.
+          A organizacao provisoria continua isolada e seus dados salvos permanecem disponiveis.
+          Retome a configuracao sem criar uma nova organizacao.
         </p>
+        <button
+          className="button button-primary"
+          type="button"
+          disabled={isPending}
+          onClick={async () => {
+            setIsPending(true);
+            setError(null);
+            const result = await startOnboardingAction();
+            setIsPending(false);
+            if (!result.ok) {
+              showActionFailure(result);
+              return;
+            }
+            setOnboarding(result.onboarding);
+            setVisibleStep(Math.min(result.onboarding.currentStep, wizardSteps.length));
+          }}
+        >
+          {isPending ? "Retomando..." : "Retomar configuracao"}
+        </button>
+        {error ? <ActionError message={error} /> : null}
       </section>
     );
   }
@@ -585,7 +605,7 @@ function ResponsibleStep({
   return (
     <StepForm
       title="Identifique o responsavel"
-      description="Este contato sera a referencia administrativa da organizacao."
+      description="A identidade autenticada sera a responsavel pela conta. O contato do negocio permanece separado na etapa anterior."
       disabled={disabled}
       onBack={onBack}
       onSubmit={(form) =>
@@ -599,7 +619,7 @@ function ResponsibleStep({
     >
       <div className="form-grid">
         <label>
-          <span>Nome completo</span>
+          <span>Nome da identidade autenticada</span>
           <input
             name="name"
             required
@@ -612,7 +632,7 @@ function ResponsibleStep({
           <input value="Proprietario" readOnly disabled />
         </label>
         <label>
-          <span>E-mail autenticado</span>
+          <span>E-mail da identidade autenticada</span>
           <input
             name="email"
             type="email"
@@ -767,21 +787,23 @@ function PlanStep({
       }
     >
       <div className="plan-grid">
-        {onboardingPlans.map((plan) => (
-          <label className="plan-card" key={plan.code}>
-            <input
-              name="selectedPlanCode"
-              type="radio"
-              value={plan.code}
-              defaultChecked={(value?.selectedPlanCode ?? businessType) === plan.code}
-              disabled={disabled}
-              required
-            />
-            <strong>{plan.name}</strong>
-            <span>{plan.description}</span>
-            <small>{plan.features.join(" · ")}</small>
-          </label>
-        ))}
+        {onboardingPlans
+          .filter((plan) => isOnboardingPlanCompatible(businessType, plan.code))
+          .map((plan) => (
+            <label className="plan-card" key={plan.code}>
+              <input
+                name="selectedPlanCode"
+                type="radio"
+                value={plan.code}
+                defaultChecked={(value?.selectedPlanCode ?? businessType) === plan.code}
+                disabled={disabled}
+                required
+              />
+              <strong>{plan.name}</strong>
+              <span>{plan.description}</span>
+              <small>{plan.features.join(" · ")}</small>
+            </label>
+          ))}
       </div>
       <p className="inline-notice">
         Sem cartao, cobranca ou contratacao nesta etapa. A escolha sera confirmada comercialmente.
@@ -851,7 +873,10 @@ export function createOnboardingSummary(payload: OrganizationOnboardingPayload) 
           payload.unit.state
         : "Nao informada"
     },
-    { label: "Responsavel", value: payload.responsible?.name ?? "Nao informado" },
+    {
+      label: "Responsavel autenticado",
+      value: payload.responsible?.name ?? "Nao informado"
+    },
     {
       label: "Modalidades",
       value: payload.operation?.modalities.join(", ") ?? "Nao informadas"

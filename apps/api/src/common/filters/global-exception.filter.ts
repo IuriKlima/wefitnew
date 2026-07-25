@@ -2,6 +2,7 @@ import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { ZodError } from "zod";
 
+import { Prisma } from "@gym-platform/database";
 import { redactSensitiveRecord } from "@gym-platform/observability";
 
 import { DomainError } from "../errors/domain-error.js";
@@ -26,7 +27,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           correlationId: request.correlationId,
           method: request.method,
           url: request.url,
-          message: exception instanceof Error ? exception.message : "Unknown error"
+          message: readSafeErrorMessage(exception)
         })
       );
     }
@@ -70,4 +71,24 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       correlationId
     };
   }
+}
+
+export function readSafeErrorMessage(exception: unknown): string {
+  if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+    return `Database request failed (${exception.code}).`;
+  }
+
+  if (
+    exception instanceof Prisma.PrismaClientUnknownRequestError ||
+    exception instanceof Prisma.PrismaClientInitializationError ||
+    exception instanceof Prisma.PrismaClientRustPanicError
+  ) {
+    return "Database request failed.";
+  }
+
+  if (exception instanceof Error) {
+    return exception.name === "Error" ? "Unhandled application error." : exception.name;
+  }
+
+  return "Unknown error.";
 }

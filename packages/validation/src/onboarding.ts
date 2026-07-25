@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isOnboardingPlanCompatible } from "@gym-platform/contracts";
+
 import { nonEmptyTrimmedString } from "./common.js";
 import { organizationTypeSchema } from "./organization.js";
 
@@ -240,6 +242,14 @@ export const completeOnboardingPayloadSchema = onboardingPayloadSchema
         code: z.ZodIssueCode.custom,
         path: ["company", "cnpj"],
         message: "CNPJ e obrigatorio para academias e redes."
+      });
+    }
+
+    if (!isOnboardingPlanCompatible(value.businessType.type, value.plan.selectedPlanCode)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["plan", "selectedPlanCode"],
+        message: "O plano selecionado nao e compativel com o tipo de negocio."
       });
     }
   });

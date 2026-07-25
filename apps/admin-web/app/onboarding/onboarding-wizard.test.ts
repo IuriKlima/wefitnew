@@ -15,7 +15,7 @@ describe("guided onboarding UI model", () => {
       "Seu negocio",
       "Dados da empresa",
       "Unidade principal",
-      "Responsavel",
+      "Responsavel da conta",
       "Operacao",
       "Plano Wefit",
       "Revisao"

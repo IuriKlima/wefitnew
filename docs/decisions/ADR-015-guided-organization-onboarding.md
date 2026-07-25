@@ -35,11 +35,17 @@ O runtime herda apenas o papel consumidor da funcao, nunca o owner com `BYPASSRL
 
 ### Estado, passos e concorrencia
 
-Os passos sao, nesta ordem: seu negocio, dados da empresa, unidade principal, responsavel, operacao, plano Wefit e revisao. A revisao conclui o fluxo; nao existe uma oitava etapa implicita. Uma etapa pode ser reeditada depois de salva, mas `currentStep` nunca diminui e nao pode saltar uma etapa ainda nao liberada.
+Os passos sao, nesta ordem: seu negocio, dados da empresa, unidade principal, responsavel, operacao, plano Wefit e revisao. A revisao conclui o fluxo; nao existe uma oitava etapa implicita. Uma etapa pode ser reeditada depois de salva e nao pode saltar uma etapa ainda nao liberada. `currentStep` so diminui para 6 quando a mudanca do tipo de negocio invalida o plano e a revisao, exigindo nova escolha compativel.
 
 Cada `PATCH` exige a `version` conhecida pelo cliente. A atualizacao usa comparacao otimista e incrementa a versao; divergencia retorna conflito sem sobrescrever dados. O payload JSON possui schema Zod versionado, inclusive horarios de funcionamento. Campos estruturais consolidados tambem sao gravados em `Organization` e `Unit` durante a conclusao transacional.
 
-`POST /onboarding/start` e `POST /onboarding/current/complete` sao idempotentes. Indices parciais impedem dois onboardings ativos para a mesma organizacao ou o mesmo ator. `COMPLETED` e `CANCELED` sao estados terminais; uma repeticao de conclusao devolve o resultado ja concluido, enquanto cancelamento e logico e nao apaga o tenant provisiorio.
+`POST /onboarding/start` e `POST /onboarding/current/complete` sao idempotentes. Indices parciais
+impedem dois onboardings ativos para a mesma organizacao ou o mesmo ator. `COMPLETED` e terminal.
+`CANCELED` bloqueia mutacoes comuns, mas pode voltar somente para `IN_PROGRESS` por retomada
+autenticada, versionada e auditada. A retomada reutiliza o tenant provisorio e corrige registros
+legados sem criar outra organizacao.
+
+“Continuar depois” nao cancela: encerra a sessao e preserva o estado `IN_PROGRESS`.
 
 ### Elegibilidade e roteamento
 
@@ -54,7 +60,9 @@ O backend e a autoridade do roteamento:
 - organizacao `ACTIVE`: dashboard;
 - organizacao `SUSPENDED`: tela de suspensao.
 
-O frontend nunca envia identidade, tenant, papel ou permissao como autoridade. Dados de responsavel informados no formulario sao contatos operacionais e nao substituem as claims autenticadas.
+O frontend nunca envia identidade, tenant, papel ou permissao como autoridade. O responsavel da
+conta usa obrigatoriamente o e-mail da identidade autenticada persistida. O contato operacional
+separado e `Organization.businessEmail`; ele nao altera `User.email` nem concede acesso.
 
 ## Seguranca e dados
 
@@ -63,20 +71,25 @@ O frontend nunca envia identidade, tenant, papel ou permissao como autoridade. D
 - Senhas existem apenas entre navegador e Supabase Auth e nunca transitam pela API Wefit.
 - Auditorias registram acao, etapa, versao e identificadores tecnicos, sem payload completo, senha, token, CNPJ, endereco ou contatos.
 - Organizacoes `ONBOARDING` e `SUSPENDED` falham nas autorizacoes normais mesmo quando a membership e valida.
-- Rate limits especificos protegem inicio e conclusao, alem do limite global da API.
+- Rate limits especificos protegem inicio e conclusao com buckets por ator e IP. Producao usa
+  Redis com TTL e operacao atomica; memoria e somente local/teste.
 
 ## Falhas e recuperacao
 
 - Falha no bootstrap reverte usuario local, tenant, unidade, acessos, onboarding e auditoria na mesma transacao.
 - Falha ao salvar uma etapa nao avanca `currentStep` nem `version`.
 - Falha na conclusao mantem a organizacao em `ONBOARDING`; o usuario pode recarregar e tentar novamente.
+- Onboarding cancelado pode ser retomado pelo mesmo ator sem novo tenant.
 - Conflito de versao retorna `409` e orienta o cliente a recarregar o estado atual.
 - Duplicidade de CNPJ ou identidade inconsistente retorna erro de dominio generico, sem revelar outra conta.
 - Recuperacao operacional usa o `correlationId` e a trilha de auditoria, sem editar migrations aplicadas.
 
 ## Observabilidade
 
-Sao auditados `onboarding.started`, `onboarding.step_saved`, `onboarding.completed` e `onboarding.canceled`. Logs de erro continuam sujeitos a redacao e nao incluem payload de formulario. Metricas recomendadas para o rollout: inicio, abandono por etapa, conflitos de versao, conclusao, cancelamento e latencia de bootstrap/conclusao.
+Sao auditados `onboarding.started`, `onboarding.step_saved`, `onboarding.completed`,
+`onboarding.canceled` e `onboarding.resumed`. Logs de erro continuam sujeitos a redacao e nao
+incluem payload de formulario. Metricas recomendadas para o rollout: inicio, abandono por etapa,
+conflitos de versao, conclusao, cancelamento, retomada e latencia de bootstrap/conclusao.
 
 ## Rollout
 

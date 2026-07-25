@@ -15,15 +15,20 @@ import type {
 } from "@gym-platform/validation";
 
 import { DomainError } from "../../../common/errors/domain-error.js";
+import {
+  RATE_LIMITER,
+  type RateLimitDecision,
+  type RateLimiter
+} from "../../../common/rate-limit/rate-limiter.js";
 import { OnboardingRepository } from "../infrastructure/onboarding.repository.js";
 
 @Injectable()
 export class OnboardingService {
-  private readonly rateLimits = new Map<string, { count: number; expiresAt: number }>();
-
   constructor(
     @Inject(OnboardingRepository)
-    private readonly repository: OnboardingRepository
+    private readonly repository: OnboardingRepository,
+    @Inject(RATE_LIMITER)
+    private readonly rateLimiter: RateLimiter
   ) {}
 
   async getCurrent(
@@ -38,10 +43,19 @@ export class OnboardingService {
 
   async start(
     actor: AuthenticatedActor,
-    correlationId: string
+    correlationId: string,
+    clientIp: string
   ): Promise<OrganizationOnboardingView> {
+    await this.assertRateLimit(actor.userId, clientIp, "start", 5);
+    const current = await this.repository.findCurrent(actor.userId, correlationId);
+    if (current) {
+      if (current.status === "CANCELED") {
+        return this.repository.resume(actor.userId, correlationId);
+      }
+      return current;
+    }
+
     this.assertSelfServiceEnabled();
-    this.assertActorRateLimit(actor.userId, "start", 5);
     await this.repository.start(actor, correlationId);
     const onboarding = await this.repository.findCurrent(actor.userId, correlationId);
     if (!onboarding) {
@@ -116,9 +130,19 @@ export class OnboardingService {
     );
   }
 
-  complete(actor: AuthenticatedActor, correlationId: string, input: CompleteOnboardingInput) {
+  async complete(
+    actor: AuthenticatedActor,
+    correlationId: string,
+    clientIp: string,
+    input: CompleteOnboardingInput
+  ) {
+    const current = await this.repository.findCurrent(actor.userId, correlationId);
+    if (current?.status === "COMPLETED") {
+      return current;
+    }
+
     this.assertSelfServiceEnabled();
-    this.assertActorRateLimit(actor.userId, "complete", 3);
+    await this.assertRateLimit(actor.userId, clientIp, "complete", 3);
     return this.repository.complete(actor.userId, correlationId, input);
   }
 
@@ -136,27 +160,36 @@ export class OnboardingService {
     }
   }
 
-  private assertActorRateLimit(
+  private async assertRateLimit(
     actorUserId: string,
+    clientIp: string,
     action: "start" | "complete",
     max: number
-  ): void {
-    const key = `${action}:${actorUserId}`;
-    const now = Date.now();
-    const current = this.rateLimits.get(key);
-    if (!current || current.expiresAt <= now) {
-      this.rateLimits.set(key, { count: 1, expiresAt: now + 60_000 });
-      return;
-    }
+  ): Promise<void> {
+    const normalizedIp = clientIp.trim().toLowerCase().slice(0, 128) || "unknown";
+    const decisions = await Promise.all([
+      this.rateLimiter.consume({
+        key: `onboarding:${action}:actor:${actorUserId}`,
+        limit: max,
+        ttlMs: 60_000
+      }),
+      this.rateLimiter.consume({
+        key: `onboarding:${action}:ip:${normalizedIp}`,
+        limit: max * 100,
+        ttlMs: 60_000
+      })
+    ]);
 
-    if (current.count >= max) {
+    if (decisions.some(isDenied)) {
       throw new DomainError(
         "Muitas tentativas. Aguarde um minuto antes de tentar novamente.",
         "ONBOARDING_RATE_LIMITED",
         429
       );
     }
-
-    current.count += 1;
   }
+}
+
+function isDenied(decision: RateLimitDecision): boolean {
+  return !decision.allowed;
 }

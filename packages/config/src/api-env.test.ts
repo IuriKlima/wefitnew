@@ -15,10 +15,35 @@ describe("api env validation", () => {
     expect(env.SWAGGER_ENABLED).toBe(true);
     expect(env.AUTH_ADAPTER).toBe("temporary-header");
     expect(env.ORGANIZATION_SELF_SERVICE_ENABLED).toBe(false);
+    expect(env.RATE_LIMIT_STORE).toBe("redis");
     expect(parseCorsOrigins(env.CORS_ORIGINS)).toEqual([
       "http://localhost:3000",
       "http://localhost:3001"
     ]);
+  });
+
+  it("allows the bounded memory store only outside production", () => {
+    const env = loadApiEnv({
+      NODE_ENV: "test",
+      DATABASE_URL: "postgresql://user:password@localhost:5432/app",
+      RATE_LIMIT_STORE: "memory",
+      CORS_ORIGINS: "http://localhost:3000"
+    });
+
+    expect(env.RATE_LIMIT_STORE).toBe("memory");
+    expect(env.REDIS_URL).toBeUndefined();
+  });
+
+  it("requires Redis-backed rate limiting in production", () => {
+    expect(() =>
+      loadApiEnv({
+        NODE_ENV: "production",
+        AUTH_ADAPTER: "external",
+        DATABASE_URL: "postgresql://user:password@localhost:5432/app",
+        RATE_LIMIT_STORE: "memory",
+        CORS_ORIGINS: "https://app.example.com"
+      })
+    ).toThrow("Production rate limiting must use Redis");
   });
 
   it("rejects missing required connection strings", () => {

@@ -15,6 +15,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
       SWAGGER_ENABLED: "false"
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      RATE_LIMIT_STORE: redis
       AUTH_ADAPTER: supabase-jwt
       ORGANIZATION_SELF_SERVICE_ENABLED: "false"
       SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}

@@ -39,7 +39,7 @@ export class OnboardingController {
 
   @Post("start")
   start(@CurrentActor() actor: AuthenticatedActor, @Req() request: RequestWithContext) {
-    return this.onboardingService.start(actor, request.correlationId ?? "");
+    return this.onboardingService.start(actor, request.correlationId ?? "", request.ip);
   }
 
   @Patch("current/steps/business-type")
@@ -102,7 +102,7 @@ export class OnboardingController {
     @CurrentActor() actor: AuthenticatedActor,
     @Req() request: RequestWithContext
   ) {
-    return this.onboardingService.complete(actor, request.correlationId ?? "", input);
+    return this.onboardingService.complete(actor, request.correlationId ?? "", request.ip, input);
   }
 
   @Post("current/cancel")

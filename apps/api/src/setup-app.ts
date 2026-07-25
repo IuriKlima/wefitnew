@@ -3,6 +3,7 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+import Redis from "ioredis";
 
 import { type ApiEnv, parseCorsOrigins } from "@gym-platform/config";
 
@@ -18,9 +19,18 @@ export async function configureApp(app: NestFastifyApplication, env: ApiEnv): Pr
     credentials: true,
     origin: parseCorsOrigins(env.CORS_ORIGINS)
   });
+  const redis = createRateLimitRedisClient(env);
+  if (redis) {
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .addHook("onClose", async () => closeRedis(redis));
+  }
+
   await app.register(rateLimit, {
     max: env.RATE_LIMIT_MAX,
-    timeWindow: "1 minute"
+    timeWindow: "1 minute",
+    ...(redis ? { redis } : {})
   });
 
   if (env.SWAGGER_ENABLED) {
@@ -32,5 +42,28 @@ export async function configureApp(app: NestFastifyApplication, env: ApiEnv): Pr
 
     const document = SwaggerModule.createDocument(app, documentConfig);
     SwaggerModule.setup("docs", app, document);
+  }
+}
+
+function createRateLimitRedisClient(env: ApiEnv): Redis | undefined {
+  if (env.RATE_LIMIT_STORE !== "redis") {
+    return undefined;
+  }
+
+  const redis = new Redis(env.REDIS_URL!, {
+    maxRetriesPerRequest: 1
+  });
+  redis.on("error", () => undefined);
+  return redis;
+}
+
+async function closeRedis(redis: Redis): Promise<void> {
+  if (["wait", "connecting", "reconnecting"].includes(redis.status)) {
+    redis.disconnect();
+    return;
+  }
+
+  if (redis.status !== "end") {
+    await redis.quit().catch(() => redis.disconnect());
   }
 }

@@ -4,6 +4,10 @@
 
 O adapter principal valida JWTs emitidos pelo Supabase. O frontend envia o bearer token apenas pelo servidor, e a API deriva o ator exclusivamente do `sub` autenticado. E-mail e nome usados no bootstrap sao extraidos somente dos claims do JWT ja validado; valores enviados em formulario nao definem a identidade do ator no backend.
 
+No onboarding, o e-mail do responsavel precisa coincidir com a identidade autenticada persistida e
+o backend rejeita um e-mail de terceiro. O contato operacional separado e
+`Organization.businessEmail`; ele nao modifica `User.email` nem concede acesso.
+
 O cadastro usa o cliente publico do Supabase, exige senha forte e aceite dos textos legais, e devolve resposta generica mesmo quando o provedor rejeita a solicitacao. A rota de callback troca apenas codigos validos por sessao e bloqueia destinos externos.
 
 O adapter `temporary-header` existe somente para desenvolvimento e testes locais. Ele le `x-dev-user-id`, valida UUID e e bloqueado quando `NODE_ENV=production`. Identidade, papeis, permissoes e escopo nunca podem ser aceitos por headers controlados pelo cliente.
@@ -46,10 +50,28 @@ O frontend pode esconder acoes indisponiveis, mas nunca deve ser a fonte final d
 `apps/admin-web` usa apenas variaveis de servidor para chamar a API:
 
 - `ADMIN_API_BASE_URL`;
-- configuracao publica e secreta do Supabase exigida pelo adapter;
+- configuracao publica do Supabase exigida pelo adapter, lida no servidor para criar a sessao;
 - `ADMIN_DEV_USER_ID` somente no desenvolvimento local com `ADMIN_AUTH_ADAPTER=temporary-header`.
 
 Nenhum identificador fixo de organizacao ou unidade e aceito em staging ou producao. Tokens e o header temporario sao montados exclusivamente em Server Components e Server Actions; eles nao devem aparecer em variaveis `NEXT_PUBLIC`, em codigo cliente ou em logs.
+
+`SUPABASE_SERVICE_ROLE_KEY` nao e consumida pelo admin-web nem pelo runtime comum da API.
+`SUPABASE_ANON_KEY`, quando ainda usada por um projeto legado, deve ser tratada como chave publica;
+esta base usa `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` no cliente. Nenhuma das duas substitui o JWT do
+usuario ou concede autoridade de tenant.
+
+## Rate limit
+
+O limite global do Fastify e os limites sensiveis do onboarding usam Redis quando
+`RATE_LIMIT_STORE=redis`. Producao rejeita qualquer outra configuracao. Os contadores do onboarding
+usam chaves separadas por ator e por IP, incremento atomico e TTL de um minuto, portanto multiplas
+replicas compartilham o mesmo estado.
+
+`RATE_LIMIT_STORE=memory` existe somente para desenvolvimento local e testes. Essa implementacao
+remove entradas expiradas e possui limite de chaves, mas nao e uma estrategia distribuida.
+
+Falha do Redis nao libera a requisicao por fallback em memoria; a operacao falha fechada para nao
+criar bypass entre replicas.
 
 ## Status atual
 

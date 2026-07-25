@@ -50,8 +50,10 @@ describe("guided organization onboarding integration", () => {
   });
 
   it("bootstraps one provisional tenant transactionally and idempotently", async () => {
-    const first = await startOnboarding(currentActorUserId);
-    const second = await startOnboarding(currentActorUserId);
+    const [first, second] = await Promise.all([
+      startOnboarding(currentActorUserId),
+      startOnboarding(currentActorUserId)
+    ]);
 
     expect(first.statusCode).toBe(201);
     expect(second.statusCode).toBe(201);
@@ -72,6 +74,41 @@ describe("guided organization onboarding integration", () => {
     expect(await prisma.role.count({ where: { key: "owner" } })).toBe(1);
     expect(await prisma.organizationOnboarding.count()).toBe(1);
     expect(await prisma.auditLog.count({ where: { action: "onboarding.started" } })).toBe(1);
+  });
+
+  it("persists a saved step across exit, refresh and idempotent return", async () => {
+    const started = parseView((await startOnboarding(currentActorUserId)).payload);
+    const saved = parseView(
+      (
+        await patchStep(currentActorUserId, "businessType", {
+          version: started.version,
+          type: "GYM"
+        })
+      ).payload
+    );
+
+    const refreshed = await app.inject({
+      method: "GET",
+      url: "/onboarding/current",
+      headers: authHeaders(currentActorUserId)
+    });
+    const returned = await startOnboarding(currentActorUserId);
+
+    expect(JSON.parse(refreshed.payload)).toMatchObject({
+      onboarding: {
+        id: saved.id,
+        currentStep: 2,
+        version: 2,
+        payload: { businessType: { type: "GYM" } }
+      }
+    });
+    expect(parseView(returned.payload)).toMatchObject({
+      id: saved.id,
+      organizationId: saved.organizationId,
+      currentStep: 2,
+      version: 2
+    });
+    expect(await prisma.organization.count()).toBe(1);
   });
 
   it("rolls back bootstrap when the authenticated identity is incomplete", async () => {
@@ -181,7 +218,7 @@ describe("guided organization onboarding integration", () => {
     expect(update.statusCode).toBe(404);
   });
 
-  it("cancels logically and rejects later state regression", async () => {
+  it("recovers a legacy canceled onboarding without creating a duplicate tenant", async () => {
     const started = parseView((await startOnboarding(currentActorUserId)).payload);
     const cancel = await app.inject({
       method: "POST",
@@ -198,6 +235,86 @@ describe("guided organization onboarding integration", () => {
     });
     expect(regression.statusCode).toBe(409);
     expect(JSON.parse(regression.payload)).toMatchObject({ code: "ONBOARDING_TERMINAL_STATE" });
+
+    const resumed = parseView((await startOnboarding(currentActorUserId)).payload);
+    expect(resumed).toMatchObject({
+      id: started.id,
+      organizationId: started.organizationId,
+      status: "IN_PROGRESS",
+      version: 3
+    });
+    expect(await prisma.organization.count()).toBe(1);
+    expect(await prisma.organizationOnboarding.count()).toBe(1);
+    expect(await prisma.auditLog.count({ where: { action: "onboarding.resumed" } })).toBe(1);
+
+    const continued = await patchStep(currentActorUserId, "businessType", {
+      version: resumed.version,
+      type: "GYM"
+    });
+    expect(continued.statusCode).toBe(200);
+  });
+
+  it.each([
+    ["PERSONAL", "PERSONAL"],
+    ["GYM", "GYM"],
+    ["NETWORK", "NETWORK"]
+  ] as const)("accepts the compatible %s and %s combination", async (businessType, planCode) => {
+    const view = await preparePlanStep(currentActorUserId, "owner@example.test", businessType);
+    const response = await patchStep(currentActorUserId, "plan", {
+      version: view.version,
+      selectedPlanCode: planCode
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(parseView(response.payload).selectedPlanCode).toBe(planCode);
+  });
+
+  it.each([
+    ["PERSONAL", "GYM"],
+    ["GYM", "NETWORK"],
+    ["NETWORK", "PERSONAL"]
+  ] as const)("rejects the incompatible %s and %s combination", async (businessType, planCode) => {
+    const view = await preparePlanStep(currentActorUserId, "owner@example.test", businessType);
+    const response = await patchStep(currentActorUserId, "plan", {
+      version: view.version,
+      selectedPlanCode: planCode
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.payload)).toMatchObject({ code: "ONBOARDING_PLAN_INCOMPATIBLE" });
+  });
+
+  it("keeps the authenticated identity authoritative and the business contact separate", async () => {
+    const view = await prepareResponsibleStep(currentActorUserId, "GYM");
+    const spoofed = await patchStep(currentActorUserId, "responsible", {
+      version: view.version,
+      name: "Terceiro",
+      email: "third-party@example.test",
+      phone: "11999998888"
+    });
+
+    expect(spoofed.statusCode).toBe(400);
+    expect(JSON.parse(spoofed.payload)).toMatchObject({
+      code: "ONBOARDING_RESPONSIBLE_IDENTITY_MISMATCH"
+    });
+    expect(
+      await prisma.user.findUniqueOrThrow({ where: { id: currentActorUserId } })
+    ).toMatchObject({
+      email: "owner@example.test"
+    });
+
+    const accepted = await patchStep(currentActorUserId, "responsible", {
+      version: view.version,
+      name: "Responsavel principal",
+      email: "owner@example.test",
+      phone: "11999998888",
+      title: "Proprietario"
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(parseView(accepted.payload).payload).toMatchObject({
+      company: { businessEmail: "contato@wefit.test" },
+      responsible: { email: "owner@example.test" }
+    });
   });
 
   it("persists all seven steps and activates the tenant in one completion transaction", async () => {
@@ -251,26 +368,61 @@ describe("guided organization onboarding integration", () => {
     expect((await startOnboarding(rateLimitedUserId)).statusCode).toBe(429);
   });
 
-  it("rate-limits repeated completion attempts per authenticated credential", async () => {
+  it("rate-limits repeated non-idempotent completion attempts per authenticated credential", async () => {
     const rateLimitedUserId = "d9999999-9999-4999-8999-999999999902";
     await seedUser(rateLimitedUserId, "Rate Complete", "rate-complete@example.test");
-    const completed = await completeFlow(rateLimitedUserId);
+    const started = parseView((await startOnboarding(rateLimitedUserId)).payload);
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const response = await completeOnboarding(rateLimitedUserId, completed.version);
-      expect(response.statusCode).toBe(201);
-      expect(parseView(response.payload).id).toBe(completed.id);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await completeOnboarding(rateLimitedUserId, started.version);
+      expect(response.statusCode).toBe(409);
     }
-    expect((await completeOnboarding(rateLimitedUserId, completed.version)).statusCode).toBe(429);
+    expect((await completeOnboarding(rateLimitedUserId, started.version)).statusCode).toBe(429);
   });
 
-  async function completeFlow(userId: string): Promise<OrganizationOnboardingView> {
+  it("returns the same completed result when completion is repeated", async () => {
+    const completed = await completeFlow(currentActorUserId, "owner@example.test");
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await completeOnboarding(currentActorUserId, completed.version);
+      expect(response.statusCode).toBe(201);
+      expect(parseView(response.payload)).toMatchObject({
+        id: completed.id,
+        organizationId: completed.organizationId,
+        status: "COMPLETED"
+      });
+    }
+  });
+
+  async function completeFlow(
+    userId: string,
+    responsibleEmail = "owner@example.test",
+    businessType: "PERSONAL" | "GYM" | "NETWORK" = "GYM"
+  ): Promise<OrganizationOnboardingView> {
+    let view = await preparePlanStep(userId, responsibleEmail, businessType);
+    view = parseView(
+      (
+        await patchStep(userId, "plan", {
+          version: view.version,
+          selectedPlanCode: businessType
+        })
+      ).payload
+    );
+    const response = await completeOnboarding(userId, view.version);
+    expect(response.statusCode).toBe(201);
+    return parseView(response.payload);
+  }
+
+  async function prepareResponsibleStep(
+    userId: string,
+    businessType: "PERSONAL" | "GYM" | "NETWORK"
+  ): Promise<OrganizationOnboardingView> {
     let view = parseView((await startOnboarding(userId)).payload);
     view = parseView(
       (
         await patchStep(userId, "businessType", {
           version: view.version,
-          type: "GYM"
+          type: businessType
         })
       ).payload
     );
@@ -294,12 +446,21 @@ describe("guided organization onboarding integration", () => {
         })
       ).payload
     );
+    return view;
+  }
+
+  async function preparePlanStep(
+    userId: string,
+    responsibleEmail: string,
+    businessType: "PERSONAL" | "GYM" | "NETWORK"
+  ): Promise<OrganizationOnboardingView> {
+    let view = await prepareResponsibleStep(userId, businessType);
     view = parseView(
       (
         await patchStep(userId, "responsible", {
           version: view.version,
           name: "Responsavel Operacional",
-          email: "responsavel@wefit.test",
+          email: responsibleEmail,
           phone: "11999998888",
           title: "Gestao"
         })
@@ -315,17 +476,7 @@ describe("guided organization onboarding integration", () => {
         })
       ).payload
     );
-    view = parseView(
-      (
-        await patchStep(userId, "plan", {
-          version: view.version,
-          selectedPlanCode: "GYM"
-        })
-      ).payload
-    );
-    const response = await completeOnboarding(userId, view.version);
-    expect(response.statusCode).toBe(201);
-    return parseView(response.payload);
+    return view;
   }
 
   function startOnboarding(userId: string) {

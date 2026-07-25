@@ -1,6 +1,7 @@
 export type OrganizationLifecycle = "ONBOARDING" | "ACTIVE" | "SUSPENDED";
 export type OrganizationOnboardingStatus = "IN_PROGRESS" | "COMPLETED" | "CANCELED";
 export type OnboardingPlanCode = "PERSONAL" | "GYM" | "NETWORK";
+export type OnboardingBusinessType = "PERSONAL" | "GYM" | "NETWORK";
 export type OnboardingModality =
   "STRENGTH" | "FUNCTIONAL" | "CROSS_TRAINING" | "PILATES" | "DANCE" | "SWIMMING" | "OTHER";
 export type OnboardingOperationPreference = "OPEN_GYM" | "CLASSES" | "MIXED";
@@ -19,7 +20,7 @@ export type OnboardingOpeningHours = {
 export type OrganizationOnboardingPayload = {
   schemaVersion: 1;
   businessType?: {
-    type: "PERSONAL" | "GYM" | "NETWORK";
+    type: OnboardingBusinessType;
   };
   company?: {
     legalName: string;
@@ -108,3 +109,18 @@ export const onboardingPlans = [
     features: ["Gestao central", "Multiplas unidades", "Permissoes por escopo"]
   }
 ] as const;
+
+export const onboardingPlanCompatibility = {
+  PERSONAL: ["PERSONAL"],
+  GYM: ["GYM"],
+  NETWORK: ["NETWORK"]
+} as const satisfies Record<OnboardingBusinessType, readonly OnboardingPlanCode[]>;
+
+export function isOnboardingPlanCompatible(
+  businessType: OnboardingBusinessType,
+  planCode: OnboardingPlanCode
+): boolean {
+  return (onboardingPlanCompatibility[businessType] as readonly OnboardingPlanCode[]).includes(
+    planCode
+  );
+}

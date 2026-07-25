@@ -132,6 +132,9 @@ importers:
       fastify:
         specifier: ^5.2.1
         version: 5.10.0
+      ioredis:
+        specifier: ^5.10.1
+        version: 5.10.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -198,6 +201,9 @@ importers:
 
   packages/validation:
     dependencies:
+      '@gym-platform/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       zod:
         specifier: ^3.24.1
         version: 3.25.76

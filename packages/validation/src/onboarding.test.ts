@@ -58,6 +58,18 @@ describe("onboarding validation", () => {
     }
   });
 
+  it("rejects incompatible business type and plan combinations at completion", () => {
+    expect(() => completeOnboardingPayloadSchema.parse(completePayload("PERSONAL", "GYM"))).toThrow(
+      "O plano selecionado nao e compativel"
+    );
+    expect(() => completeOnboardingPayloadSchema.parse(completePayload("GYM", "NETWORK"))).toThrow(
+      "O plano selecionado nao e compativel"
+    );
+    expect(() =>
+      completeOnboardingPayloadSchema.parse(completePayload("NETWORK", "PERSONAL"))
+    ).toThrow("O plano selecionado nao e compativel");
+  });
+
   it("rejects repeated or malformed CNPJ values", () => {
     for (const cnpj of ["11.111.111/1111-11", "12.345.678/0001-00"]) {
       expect(() => onboardingCompanySchema.parse({ ...validCompany(), cnpj })).toThrow();
