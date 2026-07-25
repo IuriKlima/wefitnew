@@ -89,7 +89,8 @@ describe("guided onboarding with a restricted PostgreSQL role", () => {
       ownsBusinessTables: 0,
       isOnboardingConsumer: true,
       isOnboardingOwner: false,
-      isContextConsumer: false
+      isContextConsumer: false,
+      isRlsOwner: false
     });
 
     const onboarding = await adminPrisma.organizationOnboarding.findFirstOrThrow();
@@ -108,6 +109,7 @@ type RuntimePosture = {
   isOnboardingConsumer: boolean;
   isOnboardingOwner: boolean;
   isContextConsumer: boolean;
+  isRlsOwner: boolean;
 };
 
 class OnboardingRolePrismaService extends PrismaService {
@@ -135,7 +137,7 @@ class OnboardingRolePrismaService extends PrismaService {
     return this.$transaction(async (tx) => {
       await assumeRuntimeRole(tx);
       const rows = await tx.$queryRawUnsafe<RuntimePosture[]>(
-        "SELECT role.rolname AS \"roleName\", role.rolcanlogin AS \"canLogin\", role.rolsuper AS \"isSuperuser\", role.rolbypassrls AS \"bypassesRls\", (SELECT count(*)::integer FROM pg_catalog.pg_class AS business_table INNER JOIN pg_catalog.pg_namespace AS business_schema ON business_schema.oid = business_table.relnamespace WHERE business_schema.nspname = 'public' AND business_table.relkind IN ('r', 'p') AND business_table.relname <> '_prisma_migrations' AND business_table.relowner = role.oid) AS \"ownsBusinessTables\", pg_catalog.pg_has_role(role.oid, 'wefit_onboarding_consumer', 'MEMBER') AS \"isOnboardingConsumer\", pg_catalog.pg_has_role(role.oid, 'wefit_onboarding_owner', 'MEMBER') AS \"isOnboardingOwner\", pg_catalog.pg_has_role(role.oid, 'wefit_context_consumer', 'MEMBER') AS \"isContextConsumer\" FROM pg_catalog.pg_roles AS role WHERE role.rolname = current_user"
+        "SELECT role.rolname AS \"roleName\", role.rolcanlogin AS \"canLogin\", role.rolsuper AS \"isSuperuser\", role.rolbypassrls AS \"bypassesRls\", (SELECT count(*)::integer FROM pg_catalog.pg_class AS business_table INNER JOIN pg_catalog.pg_namespace AS business_schema ON business_schema.oid = business_table.relnamespace WHERE business_schema.nspname = 'public' AND business_table.relkind IN ('r', 'p') AND business_table.relname <> '_prisma_migrations' AND business_table.relowner = role.oid) AS \"ownsBusinessTables\", pg_catalog.pg_has_role(role.oid, 'wefit_onboarding_consumer', 'MEMBER') AS \"isOnboardingConsumer\", pg_catalog.pg_has_role(role.oid, 'wefit_onboarding_owner', 'MEMBER') AS \"isOnboardingOwner\", pg_catalog.pg_has_role(role.oid, 'wefit_context_consumer', 'MEMBER') AS \"isContextConsumer\", pg_catalog.pg_has_role(role.oid, 'wefit_rls_owner', 'MEMBER') AS \"isRlsOwner\" FROM pg_catalog.pg_roles AS role WHERE role.rolname = current_user"
       );
       const posture = rows[0];
       if (!posture) {

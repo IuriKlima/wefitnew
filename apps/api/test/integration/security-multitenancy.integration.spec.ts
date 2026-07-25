@@ -103,7 +103,10 @@ describe("security and multi-tenancy integration", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.payload).dependencies.postgres).toBe("ok");
+    expect(JSON.parse(response.payload).dependencies).toEqual({
+      postgres: "ok",
+      redis: "ok"
+    });
   });
 
   it("returns 403 for an authenticated user without membership", async () => {

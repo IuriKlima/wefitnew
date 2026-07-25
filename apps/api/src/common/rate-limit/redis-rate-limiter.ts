@@ -1,5 +1,4 @@
-import type { OnModuleDestroy } from "@nestjs/common";
-import Redis from "ioredis";
+import type Redis from "ioredis";
 
 import type { RateLimitDecision, RateLimitInput, RateLimiter } from "./rate-limiter.js";
 
@@ -12,15 +11,8 @@ local ttl = redis.call('PTTL', KEYS[1])
 return { current, ttl }
 `;
 
-export class RedisRateLimiter implements RateLimiter, OnModuleDestroy {
-  private readonly redis: Redis;
-
-  constructor(redisUrl: string) {
-    this.redis = new Redis(redisUrl, {
-      maxRetriesPerRequest: 1
-    });
-    this.redis.on("error", () => undefined);
-  }
+export class RedisRateLimiter implements RateLimiter {
+  constructor(private readonly redis: Pick<Redis, "eval">) {}
 
   async consume(input: RateLimitInput): Promise<RateLimitDecision> {
     const result = await this.redis.eval(
@@ -37,17 +29,6 @@ export class RedisRateLimiter implements RateLimiter, OnModuleDestroy {
       current: currentValue,
       retryAfterMs
     };
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    if (["wait", "connecting", "reconnecting"].includes(this.redis.status)) {
-      this.redis.disconnect();
-      return;
-    }
-
-    if (this.redis.status !== "end") {
-      await this.redis.quit().catch(() => this.redis.disconnect());
-    }
   }
 }
 

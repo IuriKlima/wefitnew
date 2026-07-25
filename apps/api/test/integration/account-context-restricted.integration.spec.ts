@@ -171,7 +171,8 @@ describe("authenticated account context with a restricted PostgreSQL role", () =
       bypassesRls: false,
       ownsBusinessTables: 0,
       isContextConsumer: true,
-      isContextReader: false
+      isContextReader: false,
+      isRlsOwner: false
     });
   });
 
@@ -251,6 +252,7 @@ class RoleAssumingPrismaService extends PrismaService {
           ownsBusinessTables: number;
           isContextConsumer: boolean;
           isContextReader: boolean;
+          isRlsOwner: boolean;
         }>
       >`
         SELECT
@@ -271,7 +273,9 @@ class RoleAssumingPrismaService extends PrismaService {
           pg_catalog.pg_has_role(role.oid, 'wefit_context_consumer', 'MEMBER')
             AS "isContextConsumer",
           pg_catalog.pg_has_role(role.oid, 'wefit_context_reader', 'MEMBER')
-            AS "isContextReader"
+            AS "isContextReader",
+          pg_catalog.pg_has_role(role.oid, 'wefit_rls_owner', 'MEMBER')
+            AS "isRlsOwner"
         FROM pg_catalog.pg_roles AS role
         WHERE role.rolname = current_user
       `;

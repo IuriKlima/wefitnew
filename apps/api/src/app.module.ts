@@ -16,6 +16,7 @@ import { StudentsModule } from "./modules/students/students.module.js";
 import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module.js";
 import { UnitsModule } from "./modules/units/units.module.js";
 import { PrismaModule } from "./infrastructure/database/prisma.module.js";
+import { RedisModule } from "./infrastructure/redis/redis.module.js";
 import { AccountContextModule } from "./modules/account-context/account-context.module.js";
 
 export const API_ENV = Symbol("API_ENV");
@@ -23,6 +24,7 @@ export const API_ENV = Symbol("API_ENV");
 @Module({
   imports: [
     PrismaModule,
+    RedisModule,
     AccountContextModule,
     HealthModule,
     OrganizationsModule,

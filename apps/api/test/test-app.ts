@@ -5,6 +5,7 @@ import { loadApiEnv } from "@gym-platform/config";
 
 import { AppModule } from "../src/app.module.js";
 import { PrismaService } from "../src/infrastructure/database/prisma.service.js";
+import { createFastifyOptions } from "../src/infrastructure/http/fastify-options.js";
 import { configureApp } from "../src/setup-app.js";
 import { configureUnitTestEnv } from "./test-env.js";
 
@@ -23,13 +24,12 @@ export async function createTestApp(options?: {
 
   const moduleRef = await testingModule.compile();
 
+  const env = loadApiEnv();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter({
-      logger: false
-    })
+    new FastifyAdapter(createFastifyOptions(env, false))
   );
 
-  await configureApp(app, loadApiEnv());
+  await configureApp(app, env);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
 

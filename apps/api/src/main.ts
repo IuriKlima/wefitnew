@@ -7,15 +7,15 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { loadApiEnv } from "@gym-platform/config";
 
 import { AppModule } from "./app.module.js";
+import { readSafeErrorMessage } from "./common/filters/global-exception.filter.js";
+import { createFastifyOptions } from "./infrastructure/http/fastify-options.js";
 import { configureApp } from "./setup-app.js";
 
 async function bootstrap() {
   const env = loadApiEnv();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({
-      logger: env.NODE_ENV !== "test"
-    })
+    new FastifyAdapter(createFastifyOptions(env, env.NODE_ENV !== "test"))
   );
 
   await configureApp(app, env);
@@ -24,6 +24,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error: unknown) => {
-  console.error("API failed to start.", error);
+  console.error("API failed to start.", readSafeErrorMessage(error));
   process.exit(1);
 });
