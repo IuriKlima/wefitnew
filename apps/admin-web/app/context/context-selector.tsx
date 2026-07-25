@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import { useFormStatus } from "react-dom";
 
+import { Button, Select } from "@gym-platform/ui";
+
 import type { AdminAccountState } from "../lib/admin-api";
 import { selectActiveOrganizationAction, selectActiveUnitAction } from "./actions";
 
@@ -21,27 +23,34 @@ export function ContextSelector({ state }: { state: AdminAccountState }) {
 
   return (
     <div className="context-controls" aria-label="Contexto ativo">
-      <form action={selectActiveOrganizationAction}>
-        <input type="hidden" name="returnTo" value={pathname} />
-        <label>
-          <span>Organizacao</span>
-          <select name="organizationId" defaultValue={active.organization.id}>
-            {context.organizations.map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <ContextSubmitButton label="Trocar" />
-      </form>
+      {context.organizations.length > 1 ? (
+        <form action={selectActiveOrganizationAction}>
+          <input type="hidden" name="returnTo" value={pathname} />
+          <label>
+            <span>Organização</span>
+            <Select name="organizationId" defaultValue={active.organization.id}>
+              {context.organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <ContextSubmitButton label="Trocar" />
+        </form>
+      ) : (
+        <div className="context-summary">
+          <strong>{active.organization.name}</strong>
+          <span>{active.organization.type}</span>
+        </div>
+      )}
 
       <form action={selectActiveUnitAction}>
         <input type="hidden" name="returnTo" value={pathname} />
         <input type="hidden" name="organizationId" value={active.organization.id} />
         <label>
           <span>Unidade</span>
-          <select name="unitId" defaultValue={active.unit?.id ?? ""}>
+          <Select name="unitId" defaultValue={active.unit?.id ?? ""}>
             {active.organization.isGlobalMember ? (
               <option value="">Todas as unidades</option>
             ) : null}
@@ -50,7 +59,7 @@ export function ContextSelector({ state }: { state: AdminAccountState }) {
                 {unit.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <ContextSubmitButton label="Aplicar" />
       </form>
@@ -62,8 +71,8 @@ function ContextSubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
 
   return (
-    <button className="button button-small" type="submit" disabled={pending}>
+    <Button size="small" type="submit" disabled={pending}>
       {pending ? "Carregando..." : label}
-    </button>
+    </Button>
   );
 }

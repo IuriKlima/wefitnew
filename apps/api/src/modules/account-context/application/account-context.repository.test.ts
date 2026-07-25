@@ -60,6 +60,12 @@ describe("current account context mapping", () => {
 
     expect(context.organizations[0]).toMatchObject({
       isGlobalMember: false,
+      permissions: {
+        organization: [],
+        units: {
+          [unitAId]: []
+        }
+      },
       units: [{ id: unitAId }],
       roles: [{ scope: "UNIT", unitId: unitAId }]
     });
@@ -75,6 +81,54 @@ describe("current account context mapping", () => {
       isGlobalMember: true,
       units: [{ id: unitAId }, { id: unitBId }],
       roles: [{ scope: "ORGANIZATION" }]
+    });
+  });
+
+  it("deduplicates permissions by scope and exposes effective entitlements", () => {
+    const context = buildCurrentAccountContext(actorUserId, [
+      row({
+        organizationId: organizationAId,
+        roleUnitId: null,
+        unitId: unitAId,
+        permissionKey: "student:read",
+        planCode: "GYM",
+        featureKey: "students.manage",
+        featureEnabled: true,
+        featureLimitValue: null,
+        featureConfig: { source: "plan" }
+      }),
+      row({
+        organizationId: organizationAId,
+        roleUnitId: null,
+        unitId: unitBId,
+        permissionKey: "student:read",
+        planCode: "GYM",
+        featureKey: "students.manage",
+        featureEnabled: true,
+        featureLimitValue: null,
+        featureConfig: { source: "plan" }
+      })
+    ]);
+
+    expect(context.organizations[0]).toMatchObject({
+      permissions: {
+        organization: ["student:read"],
+        units: {
+          [unitAId]: [],
+          [unitBId]: []
+        }
+      },
+      subscription: {
+        planCode: "GYM",
+        features: [
+          {
+            key: "students.manage",
+            enabled: true,
+            limitValue: null,
+            config: { source: "plan" }
+          }
+        ]
+      }
     });
   });
 });
@@ -93,6 +147,12 @@ function row(overrides: Partial<AccountContextRow> = {}): AccountContextRow {
     unitId: null,
     unitName: "Unidade",
     unitCode: "MAIN",
+    permissionKey: null,
+    planCode: null,
+    featureKey: null,
+    featureEnabled: null,
+    featureLimitValue: null,
+    featureConfig: null,
     ...overrides
   };
 }

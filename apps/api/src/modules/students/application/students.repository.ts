@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 
-import type { PaginatedStudents, Student } from "@gym-platform/contracts";
+import type { PaginatedStudents, Student, StudentDashboardSummary } from "@gym-platform/contracts";
 import { Prisma } from "@gym-platform/database";
 import type {
   CreateStudentInput,
@@ -132,6 +132,54 @@ export class StudentsRepository {
     unitId?: string
   ): Promise<Student> {
     return this.findForOrganization(transaction, organizationId, studentId, unitId);
+  }
+
+  async getDashboardSummary(
+    transaction: Prisma.TransactionClient,
+    organizationId: string,
+    unitId?: string,
+    now = new Date()
+  ): Promise<StudentDashboardSummary> {
+    const baseWhere = buildStudentWhere(
+      organizationId,
+      {
+        page: 1,
+        pageSize: 1
+      },
+      unitId
+    );
+    const last30Days = new Date(now);
+    last30Days.setUTCDate(last30Days.getUTCDate() - 30);
+
+    const [activeStudents, inactiveStudents, totalStudents, newStudentsLast30Days, availableUnits] =
+      await Promise.all([
+        transaction.student.count({ where: { ...baseWhere, status: "ACTIVE" } }),
+        transaction.student.count({ where: { ...baseWhere, status: "INACTIVE" } }),
+        transaction.student.count({ where: baseWhere }),
+        transaction.student.count({
+          where: {
+            ...baseWhere,
+            createdAt: {
+              gte: last30Days
+            }
+          }
+        }),
+        transaction.unit.count({
+          where: {
+            organizationId,
+            ...(unitId ? { id: unitId } : {}),
+            deletedAt: null
+          }
+        })
+      ]);
+
+    return {
+      activeStudents,
+      inactiveStudents,
+      newStudentsLast30Days,
+      totalStudents,
+      availableUnits
+    };
   }
 
   async update(

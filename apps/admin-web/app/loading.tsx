@@ -1,10 +1,10 @@
+import { Skeleton } from "@gym-platform/ui";
+
 export default function Loading() {
   return (
     <main className="content" aria-busy="true">
-      <section className="empty-state">
-        <h1>Carregando contexto</h1>
-        <p>Validando suas organizacoes e unidades permitidas.</p>
-      </section>
+      <Skeleton lines={4} label="Carregando painel" />
+      <Skeleton lines={6} label="Carregando indicadores" />
     </main>
   );
 }

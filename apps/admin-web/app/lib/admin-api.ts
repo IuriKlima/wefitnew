@@ -7,6 +7,7 @@ import type {
   OrganizationOnboardingView,
   PaginatedStudents,
   Student,
+  StudentDashboardSummary,
   StudentPayload,
   UnitSummary
 } from "@gym-platform/contracts";
@@ -129,6 +130,18 @@ export async function listStudents(input: ListStudentsInput): Promise<PaginatedS
 
   return apiRequest<PaginatedStudents>(
     `/organizations/${active.organization.id}/students${query ? `?${query}` : ""}`,
+    {},
+    { activeContext: active }
+  );
+}
+
+export async function getStudentDashboardSummary(
+  activeContext?: ActiveAccountContext
+): Promise<StudentDashboardSummary> {
+  const active = activeContext ?? (await requireActiveContext());
+
+  return apiRequest<StudentDashboardSummary>(
+    `/organizations/${active.organization.id}/students/summary`,
     {},
     { activeContext: active }
   );

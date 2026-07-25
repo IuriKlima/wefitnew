@@ -73,6 +73,14 @@ const paginatedStudentsSchema = z.object({
   })
 });
 
+const studentDashboardSummarySchema = z.object({
+  activeStudents: z.number().int().nonnegative(),
+  inactiveStudents: z.number().int().nonnegative(),
+  newStudentsLast30Days: z.number().int().nonnegative(),
+  totalStudents: z.number().int().nonnegative(),
+  availableUnits: z.number().int().nonnegative()
+});
+
 describe("security and multi-tenancy integration", () => {
   const prisma = createTestPrismaClient();
   const subscriptionsService = new SubscriptionsService(prisma);
@@ -257,6 +265,59 @@ describe("security and multi-tenancy integration", () => {
       headers
     });
     expect(deniedResponse.statusCode).toBe(404);
+  });
+
+  it("returns real dashboard metrics within the authorized organization and unit scope", async () => {
+    const organization = await createOrganization(ownerUserId, "student-dashboard-scope");
+    const unitB = await createUnit(organization.organization.id, ownerUserId, "DASHBOARD_UNIT_B");
+    await createStudent(organization.organization.id, ownerUserId, "Aluno Ativo", [
+      organization.defaultUnit.id
+    ]);
+    const inactiveStudent = await createStudent(
+      organization.organization.id,
+      ownerUserId,
+      "Aluno Inativo",
+      [unitB.id]
+    );
+    await app.inject({
+      method: "PATCH",
+      url: `/organizations/${organization.organization.id}/students/${inactiveStudent.id}`,
+      headers: authHeaders(ownerUserId),
+      payload: { status: "INACTIVE" }
+    });
+    await assignScopedStudentManager(
+      organization.organization.id,
+      organization.defaultUnit.id,
+      limitedUserId
+    );
+
+    const scopedResponse = await app.inject({
+      method: "GET",
+      url: `/organizations/${organization.organization.id}/students/summary`,
+      headers: authHeaders(limitedUserId, organization.defaultUnit.id)
+    });
+    expect(scopedResponse.statusCode).toBe(200);
+    expect(studentDashboardSummarySchema.parse(JSON.parse(scopedResponse.payload))).toEqual({
+      activeStudents: 1,
+      inactiveStudents: 0,
+      newStudentsLast30Days: 1,
+      totalStudents: 1,
+      availableUnits: 1
+    });
+
+    const organizationResponse = await app.inject({
+      method: "GET",
+      url: `/organizations/${organization.organization.id}/students/summary`,
+      headers: authHeaders(ownerUserId)
+    });
+    expect(organizationResponse.statusCode).toBe(200);
+    expect(studentDashboardSummarySchema.parse(JSON.parse(organizationResponse.payload))).toEqual({
+      activeStudents: 1,
+      inactiveStudents: 1,
+      newStudentsLast30Days: 2,
+      totalStudents: 2,
+      availableUnits: 2
+    });
   });
 
   it("prevents a unit-scoped user from mutating or archiving a shared student", async () => {

@@ -27,6 +27,7 @@ import type { RequestWithContext } from "../../../common/request-context/request
 import { ArchiveStudentUseCase } from "../application/archive-student.use-case.js";
 import { CreateStudentUseCase } from "../application/create-student.use-case.js";
 import { GetStudentUseCase } from "../application/get-student.use-case.js";
+import { GetStudentDashboardSummaryUseCase } from "../application/get-student-dashboard-summary.use-case.js";
 import { ListStudentsUseCase } from "../application/list-students.use-case.js";
 import { UpdateStudentUseCase } from "../application/update-student.use-case.js";
 
@@ -46,6 +47,8 @@ export class StudentsController {
     private readonly createStudentUseCase: CreateStudentUseCase,
     @Inject(ListStudentsUseCase)
     private readonly listStudentsUseCase: ListStudentsUseCase,
+    @Inject(GetStudentDashboardSummaryUseCase)
+    private readonly getStudentDashboardSummaryUseCase: GetStudentDashboardSummaryUseCase,
     @Inject(GetStudentUseCase)
     private readonly getStudentUseCase: GetStudentUseCase,
     @Inject(UpdateStudentUseCase)
@@ -90,6 +93,23 @@ export class StudentsController {
     return this.listStudentsUseCase.execute(
       routeParams.organizationId,
       parsedQuery,
+      actor.userId,
+      request.correlationId ?? "",
+      request.requestContext?.unitId
+    );
+  }
+
+  @Get("summary")
+  @RequirePermissions(permissionKeys.studentRead)
+  getDashboardSummary(
+    @Param() params: unknown,
+    @CurrentActor() actor: AuthenticatedActor,
+    @Req() request: RequestWithContext
+  ) {
+    const routeParams = studentRouteParamsSchema.parse(params);
+
+    return this.getStudentDashboardSummaryUseCase.execute(
+      routeParams.organizationId,
       actor.userId,
       request.correlationId ?? "",
       request.requestContext?.unitId

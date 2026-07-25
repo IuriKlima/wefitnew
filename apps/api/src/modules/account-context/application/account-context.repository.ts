@@ -22,6 +22,12 @@ export type AccountContextRow = {
   unitId: string | null;
   unitName: string | null;
   unitCode: string | null;
+  permissionKey: string | null;
+  planCode: string | null;
+  featureKey: string | null;
+  featureEnabled: boolean | null;
+  featureLimitValue: number | null;
+  featureConfig: unknown;
 };
 
 @Injectable()
@@ -54,6 +60,9 @@ export function buildCurrentAccountContext(
     string,
     {
       value: AccountContextOrganization;
+      featureKeys: Set<string>;
+      organizationPermissionKeys: Set<string>;
+      unitPermissionKeys: Map<string, Set<string>>;
       roleKeys: Set<string>;
       unitIds: Set<string>;
     }
@@ -82,9 +91,22 @@ export function buildCurrentAccountContext(
           type: row.organizationType,
           lifecycle: row.organizationLifecycle,
           isGlobalMember: false,
+          permissions: {
+            organization: [],
+            units: {}
+          },
+          subscription: row.planCode
+            ? {
+                planCode: row.planCode,
+                features: []
+              }
+            : null,
           roles: [],
           units: []
         },
+        featureKeys: new Set(),
+        organizationPermissionKeys: new Set(),
+        unitPermissionKeys: new Map(),
         roleKeys: new Set(),
         unitIds: new Set()
       };
@@ -115,25 +137,57 @@ export function buildCurrentAccountContext(
           ...(row.roleUnitId ? { unitId: row.roleUnitId } : {})
         });
       }
+
+      if (row.permissionKey) {
+        if (isGlobalRole) {
+          organization.organizationPermissionKeys.add(row.permissionKey);
+        } else if (row.roleUnitId) {
+          const permissionKeys =
+            organization.unitPermissionKeys.get(row.roleUnitId) ?? new Set<string>();
+          permissionKeys.add(row.permissionKey);
+          organization.unitPermissionKeys.set(row.roleUnitId, permissionKeys);
+        }
+      }
+    }
+
+    if (
+      organization.value.subscription &&
+      row.featureKey &&
+      !organization.featureKeys.has(row.featureKey)
+    ) {
+      organization.featureKeys.add(row.featureKey);
+      organization.value.subscription.features.push({
+        key: row.featureKey,
+        enabled: row.featureEnabled ?? false,
+        limitValue: row.featureLimitValue,
+        config: toFeatureConfig(row.featureConfig)
+      });
     }
 
     organization.value.isGlobalMember ||= isGlobalRole;
   }
 
-  const organizationValues = [...organizations.values()].map(({ value }) => {
-    if (!value.isGlobalMember) {
-      const scopedUnitIds = new Set(
-        value.roles.flatMap((role) => (role.scope === "UNIT" && role.unitId ? [role.unitId] : []))
-      );
-      value.units = value.units.filter((unit) => scopedUnitIds.has(unit.id));
-    }
+  const organizationValues = [...organizations.values()].map(
+    ({ value, organizationPermissionKeys, unitPermissionKeys }) => {
+      if (!value.isGlobalMember) {
+        const scopedUnitIds = new Set(
+          value.roles.flatMap((role) => (role.scope === "UNIT" && role.unitId ? [role.unitId] : []))
+        );
+        value.units = value.units.filter((unit) => scopedUnitIds.has(unit.id));
+      }
 
-    value.roles.sort((left, right) =>
-      `${left.scope}:${left.name}`.localeCompare(`${right.scope}:${right.name}`, "pt-BR")
-    );
-    value.units.sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
-    return value;
-  });
+      value.permissions.organization = [...organizationPermissionKeys].sort();
+      value.permissions.units = Object.fromEntries(
+        value.units.map((unit) => [unit.id, [...(unitPermissionKeys.get(unit.id) ?? [])].sort()])
+      );
+      value.subscription?.features.sort((left, right) => left.key.localeCompare(right.key));
+      value.roles.sort((left, right) =>
+        `${left.scope}:${left.name}`.localeCompare(`${right.scope}:${right.name}`, "pt-BR")
+      );
+      value.units.sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+      return value;
+    }
+  );
   organizationValues.sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
 
   return {
@@ -143,4 +197,12 @@ export function buildCurrentAccountContext(
     },
     organizations: organizationValues
   };
+}
+
+function toFeatureConfig(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
 }

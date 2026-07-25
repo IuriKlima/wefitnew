@@ -26,6 +26,13 @@ const accountContext: CurrentAccountContext = {
       type: "GYM",
       lifecycle: "ACTIVE",
       isGlobalMember: true,
+      permissions: {
+        organization: ["student:read", "student:manage"],
+        units: {
+          [unitId]: []
+        }
+      },
+      subscription: null,
       roles: [{ key: "owner", name: "Owner", scope: "ORGANIZATION" }],
       units: [{ id: unitId, name: "Unidade permitida", code: "MAIN", isAllowed: true }]
     }

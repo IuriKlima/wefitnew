@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { AppShell } from "./app-shell";
 import { AdminApiError, getAdminAccountState } from "./lib/admin-api";
 import { readAdminAuthAdapter } from "./lib/admin-auth";
+import "@gym-platform/ui/tokens.css";
+import "@gym-platform/ui/components.css";
 import "./styles.css";
 
 export const metadata: Metadata = {

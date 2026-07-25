@@ -1,3 +1,5 @@
+import type { FeatureEntitlement } from "./entitlements.js";
+
 export type AccountOrganizationType = "PERSONAL" | "GYM" | "NETWORK";
 export type AccountOrganizationLifecycle = "ONBOARDING" | "ACTIVE" | "SUSPENDED";
 
@@ -21,6 +23,14 @@ export type AccountContextOrganization = {
   type: AccountOrganizationType;
   lifecycle: AccountOrganizationLifecycle;
   isGlobalMember: boolean;
+  permissions: {
+    organization: string[];
+    units: Record<string, string[]>;
+  };
+  subscription: {
+    planCode: string;
+    features: FeatureEntitlement[];
+  } | null;
   roles: AccountContextRole[];
   units: AccountContextUnit[];
 };

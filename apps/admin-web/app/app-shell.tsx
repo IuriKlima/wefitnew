@@ -1,11 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { AppShell as WefitAppShell, Button } from "@gym-platform/ui";
+
 import { ContextSelector } from "./context/context-selector";
 import type { AdminAccountState } from "./lib/admin-api";
+import { buildAdminNavigation } from "./lib/navigation";
 import { logoutAction } from "./logout/actions";
 
 type AppShellProps = {
@@ -25,34 +27,27 @@ export function AppShell({ accountState, children, usesSupabaseAuth }: AppShellP
     return children;
   }
 
+  const navigation = buildAdminNavigation(accountState.active, pathname);
+
   return (
-    <div className="admin-shell">
-      <aside className="sidebar" aria-label="Navegacao principal">
-        <Link className="brand" href="/">
-          Wefit
-        </Link>
-        <nav className="nav-list">
-          <Link href="/">Inicio</Link>
-          {accountState.active ? <Link href="/students">Alunos</Link> : null}
-        </nav>
-      </aside>
-      <div className="workspace">
-        <header className="topbar">
-          <ContextSelector state={accountState} />
-          <div className="account-actions">
-            <span>{accountState.context.user.name ?? "Conta sem perfil"}</span>
-            {usesSupabaseAuth ? (
-              <form action={logoutAction}>
-                <button className="button button-small" type="submit">
-                  Sair
-                </button>
-              </form>
-            ) : null}
-          </div>
-        </header>
-        {children}
-      </div>
-    </div>
+    <WefitAppShell
+      contextSelector={<ContextSelector state={accountState} />}
+      navigation={navigation}
+      profile={
+        <div className="account-actions">
+          <span>{accountState.context.user.name ?? "Conta sem perfil"}</span>
+          {usesSupabaseAuth ? (
+            <form action={logoutAction}>
+              <Button size="small" type="submit">
+                Sair
+              </Button>
+            </form>
+          ) : null}
+        </div>
+      }
+    >
+      {children}
+    </WefitAppShell>
   );
 }
 
