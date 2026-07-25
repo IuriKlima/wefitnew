@@ -46,10 +46,19 @@ jobs:
           govulncheck ./...
       
       - name: Test
-        run: go test -v ./...
+        run: go test -v -tags=testkit ./...
       
       - name: Test (Race)
-        run: go test -race -v ./...
+        run: go test -race -v -tags=testkit ./...
+        
+      - name: Benchmark
+        run: go test -bench=. -benchmem ./... | tee benchmark_results.txt
+        
+      - name: Upload Benchmark Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: apps/access-gateway/benchmark_results.txt
 
   test-and-build-windows:
     name: Build & Test on Windows
@@ -70,7 +79,7 @@ jobs:
         run: go vet ./...
       
       - name: Test DPAPI and Windows Services
-        run: go test -v ./...
+        run: go test -v -tags=testkit ./...
         
       - name: Build edge-agent
         run: go build -o wefit-edge-agent-windows-amd64.exe ./cmd/edge-agent
