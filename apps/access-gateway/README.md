@@ -1,5 +1,18 @@
-# Access gateway
+# Wefit Edge Agent
 
-Espaco reservado para o gateway local de controle de acesso.
+Para rodar (Console):
+```
+go run cmd/edge-agent/main.go run
+```
 
-O gateway devera conectar catracas por adapters de fabricante, manter funcionamento parcialmente offline e abrir conexao de saida segura com a nuvem. A implementacao real ficara para uma fase posterior.
+Para Build Windows:
+```
+$env:GOOS="windows"
+$env:GOARCH="amd64"
+go build -o edge-agent.exe ./cmd/edge-agent
+```
+
+Testes E2E e unitários:
+```
+go test -v ./...
+```

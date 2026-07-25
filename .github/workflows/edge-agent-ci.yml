@@ -1,0 +1,101 @@
+name: Edge Agent CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/edge-agent**'
+    paths:
+      - 'apps/access-gateway/**'
+      - '.github/workflows/edge-agent-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/access-gateway/**'
+      - '.github/workflows/edge-agent-ci.yml'
+
+defaults:
+  run:
+    working-directory: apps/access-gateway
+
+jobs:
+  test-linux:
+    name: Test on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'apps/access-gateway/go.mod'
+          cache: true
+      
+      - name: Verify Dependencies
+        run: |
+          go mod tidy
+          go mod verify
+      
+      - name: Format
+        run: if [ -n "$(gofmt -l .)" ]; then echo "Go code is not formatted"; exit 1; fi
+      
+      - name: Vet
+        run: go vet ./...
+      
+      - name: Vulnerability Check
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      
+      - name: Test
+        run: go test -v ./...
+      
+      - name: Test (Race)
+        run: go test -race -v ./...
+
+  test-and-build-windows:
+    name: Build & Test on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'apps/access-gateway/go.mod'
+          cache: true
+      
+      - name: Verify Dependencies
+        run: go mod verify
+      
+      - name: Vet
+        run: go vet ./...
+      
+      - name: Test DPAPI and Windows Services
+        run: go test -v ./...
+        
+      - name: Build edge-agent
+        run: go build -o wefit-edge-agent-windows-amd64.exe ./cmd/edge-agent
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 0
+          
+      - name: Build mock-turnstile
+        run: go build -o wefit-mock-turnstile-windows-amd64.exe ./cmd/mock-turnstile
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 0
+          
+      - name: Generate Checksums
+        run: |
+          Get-FileHash wefit-edge-agent-windows-amd64.exe -Algorithm SHA256 > checksums.txt
+          Get-FileHash wefit-mock-turnstile-windows-amd64.exe -Algorithm SHA256 >> checksums.txt
+          
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          path: |
+            apps/access-gateway/wefit-edge-agent-windows-amd64.exe
+            apps/access-gateway/wefit-mock-turnstile-windows-amd64.exe
+            apps/access-gateway/checksums.txt
