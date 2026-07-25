@@ -64,25 +64,35 @@ O contato operacional separado é `Organization.businessEmail`, informado na eta
 negócio. Ele pode ser diferente da identidade autenticada e não concede login, membership, papel
 ou permissão.
 
+Na conclusão, a identidade, o onboarding, a organização, o tipo de negócio, o plano e a versão
+esperada são revalidados dentro da transação. A conclusão não confia apenas nas validações das
+etapas anteriores e não ativa um tenant cujo estado tenha mudado de forma concorrente.
+
 ## Segurança e disponibilidade
 
 - O backend deriva o ator do JWT validado ou do adapter temporário permitido somente localmente.
 - A organização fica em `ONBOARDING` e não acessa módulos de negócio.
 - Leituras e mutações comuns usam `organizationId` resolvido pelo backend e RLS forçada.
 - Início e conclusão possuem buckets por ator e por IP.
+- O IP só considera cabeçalhos de proxy quando a origem está na allowlist `TRUSTED_PROXIES`;
+  wildcard e entradas inválidas são recusados em produção.
 - Produção exige Redis; memória é aceita apenas de forma explícita em desenvolvimento/teste.
 - O contador Redis usa operação atômica com TTL e funciona entre réplicas.
+- `/health/live` verifica apenas o processo; `/health/ready` exige PostgreSQL e Redis disponíveis.
 - Nenhum payload completo, endereço, CNPJ, contato, token ou segredo entra na auditoria.
 
-## Critérios para liberar CRM de alunos
+## Gate concluído para liberar o CRM de alunos
 
-O CRM pode iniciar somente depois de:
+O gate local e de CI foi concluído em 25 de julho de 2026 com:
 
 - lint, typecheck, build e testes unitários aprovados;
 - migrations aplicadas em PostgreSQL de teste terminado em `_test`;
 - integrações de onboarding, contexto restrito e isolamento aprovadas;
 - teste Redis real de concorrência e expiração aprovado;
-- `test:rls-spike` aprovado no ambiente atual;
-- validação de staging com runtime sem superuser, ownership ou `BYPASSRLS`;
+- `test:rls-spike` aprovado;
 - revisão visual responsiva do onboarding;
 - ausência de segredo versionado.
+
+A validação de staging com o runtime final sem superuser, ownership ou `BYPASSRLS` permanece
+obrigatória antes de tráfego de produção. Ela não bloqueia a evolução do CRM no branch, mas bloqueia
+a abertura do beta para clientes.

@@ -3,33 +3,38 @@
 ## Entra no MVP
 
 - Base multi-tenant com `Organization` e `Unit`.
-- Identidade, memberships, papeis e permissoes granulares.
-- Cadastro de conta com Supabase para ambientes autorizados e confirmacao segura de sessao.
-- Onboarding persistente em sete etapas para negocio, unidade, responsavel, funcionamento, plano
-  de configuracao, revisao e conclusao.
-- Ciclo de vida da organizacao com bloqueio dos modulos ate a conclusao transacional.
-- Gestao inicial de alunos conforme ADR-011.
-- Estrutura para treinos e avaliacoes, sem fluxo final completo nesta fundacao.
-- Estrutura para contratos, planos e pagamentos, sem financeiro completo nesta fundacao.
-- Agenda operacional inicial.
-- Auditoria de operacoes sensiveis.
+- Identidade, memberships, papéis e permissões granulares.
+- Cadastro de conta com Supabase para ambientes autorizados e confirmação segura de sessão.
+- Onboarding persistente em sete etapas para negócio, unidade, responsável, funcionamento, plano
+  de configuração, revisão e conclusão.
+- Ciclo de vida da organização com bloqueio dos módulos até a conclusão transacional.
+- Design System Wefit e shell administrativo responsivo.
+- Dashboard inicial alimentado por dados reais do CRM de alunos.
+- CRM de alunos V1 operacional: lista, busca, filtros, paginação, cadastro, edição, detalhe,
+  vínculos de unidade, histórico auditável e ciclo ativo/inativo.
+- Auditoria de operações sensíveis.
 - Portal ou aplicativo inicial para alunos em fase futura.
-- Preparacao para controle de acesso por gateway local.
+- Preparação arquitetural para controle de acesso por gateway local, sem implementação neste sprint.
 
-## Nao entra nesta fundacao
+## Não entra nesta versão
 
 - Financeiro completo.
 - Contratos comerciais completos.
 - Treinos completos.
+- Avaliações físicas completas.
+- Agenda operacional.
 - Aplicativo final.
-- Integracao real com catracas.
-- Integracao com Wellhub.
-- Integracao com TotalPass.
-- Inteligencia artificial.
-- Telas finais do produto.
-- Cobranca, cartao ou contratacao de assinatura durante o onboarding.
-- CPF, biometria, prontuario medico ou dados sensiveis de aluno.
+- Integração real com catracas ou Edge Agent.
+- Integração com Wellhub.
+- Integração com TotalPass.
+- Inteligência artificial.
+- Cobrança, cartão ou contratação de assinatura durante o onboarding.
+- CPF, biometria, prontuário médico ou dados sensíveis de aluno.
+- Exclusão física ou arquivamento de alunos pelo painel.
 
-## Criterio de corte
+## Critério de corte
 
-O MVP deve priorizar fluxos que validem operacao real com seguranca multi-tenant e permissoes corretas antes de ampliar automacoes e integracoes. Nesta versao, o lancamento e um beta fechado: a flag de self-service permanece desligada em producao ate aprovacao explicita de seguranca, produto, operacao e textos legais.
+O MVP prioriza operação real com isolamento de tenant, autorização no backend, auditoria e estados
+de interface acessíveis antes de ampliar automações e integrações. O lançamento é um beta fechado:
+self-service permanece desligado em produção até aprovação explícita de segurança, produto,
+operação, staging e textos legais.
