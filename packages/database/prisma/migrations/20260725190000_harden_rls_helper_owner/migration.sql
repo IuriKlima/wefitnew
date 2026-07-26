@@ -7,4 +7,3 @@ ALTER ROLE wefit_rls_owner
 
 REVOKE wefit_rls_owner FROM wefit_context_consumer;
 REVOKE wefit_rls_owner FROM wefit_onboarding_consumer;
-

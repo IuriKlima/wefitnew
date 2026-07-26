@@ -1,6 +1,6 @@
-# Gym Management Platform
+# Wefit
 
-Fundacao tecnica de uma plataforma SaaS multi-tenant para gestao de profissionais, academias e redes de academias.
+Plataforma SaaS multi-tenant para gestao de profissionais, academias e redes de academias.
 
 ## Objetivo
 
@@ -138,4 +138,7 @@ docs/
 
 ## Decisoes pendentes
 
-Nao foram decididos nome comercial, identidade visual, precos, limites comerciais, provedor definitivo de autenticacao, provedor de pagamento, infraestrutura final, politica de inadimplencia, fabricante de catraca, formato final do app mobile ou armazenamento de biometria.
+O nome comercial atual e Wefit, e a direcao visual vigente esta documentada no Design System
+Wefit. Permanecem pendentes precos, limites comerciais, contrato definitivo do Supabase, provedor
+de pagamento, infraestrutura final, politica de inadimplencia, fabricante de catraca, formato
+final do app mobile, armazenamento de biometria e aprovacoes juridicas e operacionais.

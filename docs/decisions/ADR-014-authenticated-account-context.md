@@ -2,7 +2,12 @@
 
 ## Status
 
-Aceita, pendente de validacao da migration em staging.
+Aceita e implementada no repositorio; validacao da migration e das roles reais em staging
+pendente.
+
+`GET /me/context`, a funcao `get_actor_context()`, as roles consumidoras e os testes automatizados
+ja existem. O CI aprovou a descoberta autenticada e os cenarios de isolamento, mas essa evidencia
+nao substitui a verificacao de grants, ownership e `BYPASSRLS` no PostgreSQL de staging.
 
 ## Contexto
 
@@ -34,4 +39,5 @@ O painel guarda a selecao ativa em cookies HTTP-only, mas revalida organizacao e
 - Usuarios podem alternar entre academias e unidades sem ampliar o escopo concedido no banco.
 - A funcao privilegiada aumenta a superficie critica e exige revisao da migration e teste com a role real em staging.
 - O endpoint nao cria usuario, membership, organizacao ou unidade.
-- Testes locais cobrem o mapeamento e a autenticacao, mas nao substituem a validacao da funcao e dos grants no provedor final.
+- Testes locais e de CI cobrem mapeamento, autenticacao e isolamento, mas nao substituem a
+  validacao da funcao, dos grants e das memberships de role no provedor final.

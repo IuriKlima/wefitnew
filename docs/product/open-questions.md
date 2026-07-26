@@ -2,8 +2,14 @@
 
 As decisoes abaixo nao devem ser tomadas sem validacao de produto, comercial, juridica ou tecnica especifica:
 
-- Nome comercial do produto.
-- Identidade visual.
+## Definicoes atuais
+
+- O nome comercial atual e `Wefit`.
+- A direcao visual atual e definida pelo Design System Wefit. Identidade, marca e componentes
+  podem receber refinamentos, mas nao estao totalmente indefinidos.
+
+## Questoes ainda pendentes
+
 - Precos.
 - Limites de alunos.
 - Limites de colaboradores.

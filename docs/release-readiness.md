@@ -5,7 +5,7 @@
 - Base imutável da sprint: `bf01ca19`
 - Escopo: fundação multi-tenant, onboarding, infraestrutura, Design System, shell administrativo e
   CRM de alunos V1
-- Status: **aprovado para staging e beta fechado; produção externa condicionada**
+- Status: **aprovado para staging; beta fechado e produção externa condicionados ao ambiente**
 
 ## Resultado entregue
 
@@ -24,13 +24,14 @@
 
 ## Evidência de commits e CI
 
-| Etapa         | Commit                                     | Evidência                                                                         |
-| ------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
-| Fundação      | `d7e884e6395ade07cc402c8edca0eb492d2956df` | gate de CI aprovado                                                               |
-| Design System | `a0347e062eeef5421994d30ee67da8b0755312c9` | gate de CI aprovado                                                               |
-| CRM de alunos | `c5fdf35b558ac853cad5e18a04514dbffa4d8b53` | [CI #13 aprovado](https://github.com/IuriKlima/wefitnew/actions/runs/30176760253) |
+| Etapa                | Commit                                     | Evidência                                                                         |
+| -------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
+| Fundação             | `d7e884e6395ade07cc402c8edca0eb492d2956df` | gate de CI aprovado                                                               |
+| Design System        | `a0347e062eeef5421994d30ee67da8b0755312c9` | gate de CI aprovado                                                               |
+| CRM de alunos        | `c5fdf35b558ac853cad5e18a04514dbffa4d8b53` | [CI #13 aprovado](https://github.com/IuriKlima/wefitnew/actions/runs/30176760253) |
+| Documentação do gate | `5b21ef413843ebeab8b78cc1b0476ab445da3eef` | [CI #14 aprovado](https://github.com/IuriKlima/wefitnew/actions/runs/30177283670) |
 
-No CI #13, os três jobs concluíram com `success`:
+No CI #14, os três jobs concluíram com `success`:
 
 - `Quality and build`: install, Prisma generate/validate, format, lint, typecheck, build e testes
   unitários;
@@ -48,18 +49,26 @@ No CI #13, os três jobs concluíram com `success`:
 | `pnpm format:check`              | aprovado                                                       |
 | `pnpm lint`                      | aprovado, 19 tarefas                                           |
 | `pnpm typecheck`                 | aprovado, 19 tarefas                                           |
-| `pnpm test:unit`                 | aprovado, 19 tarefas                                           |
+| `pnpm test:unit`                 | aprovado, 127 testes Vitest e 6 casos `node:test`              |
 | `pnpm build`                     | aprovado, 11 tarefas                                           |
 | `pnpm test:integration`          | aprovado, 63 testes em 5 arquivos com PostgreSQL e Redis reais |
-| `pnpm test:rls-spike`            | aprovado                                                       |
+| `pnpm test:rls-spike`            | aprovado, 50/50 casos e cleanup confirmado                     |
 | Redis concorrente e TTL          | aprovado com serviço real                                      |
-| imagens de produção              | API, admin web e workers aprovadas no CI                       |
+| imagens de produção              | API, admin web e workers aprovadas localmente e no CI          |
 | `pnpm validate:release` local    | bloqueio seguro esperado sem variáveis de staging/produção     |
 
 Os testes unitários relevantes cobrem validação, permissões, entitlements, contexto, rate limit,
 proxies, readiness, Design System, navegação, transporte server-side, formulário e consultas do
 CRM. Os testes de integração cobrem onboarding, autorização, isolamento cross-tenant, vínculos,
 ciclo de vida, auditoria e RLS.
+
+Na revalidação formal de 25 de julho de 2026, o PostgreSQL de teste permaneceu saudável na porta
+prevista `55432`. Como a porta `6379` estava ocupada por outro projeto da estação compartilhada,
+o Redis exclusivo do Wefit foi publicado em `16379`, sem interromper serviços alheios. A primeira
+execução isolada não alcançou esse endpoint por restrição do sandbox. Duas tentativas do spike
+também atingiram o `maxWait` fixo do Prisma enquanto watchers antigos de `pnpm dev` consumiam
+recursos. Depois de encerrar somente a árvore de desenvolvimento do Wefit, a execução final
+passou 50/50, e o catálogo confirmou zero schemas e zero roles descartáveis remanescentes.
 
 ## Revisão visual e acessibilidade
 
@@ -107,7 +116,8 @@ pelo guardrail, e continua bloqueado em produção.
 ## Decisão do gate
 
 O gate de código e infraestrutura da sprint está aprovado. O branch está apto para deploy em
-staging e preparação de beta fechado.
+staging. A preparação do beta fechado pode continuar, mas sua liberação depende das validações
+reais de identidade, banco, Redis, observabilidade e operação no ambiente.
 
 Não liberar tráfego externo de produção nem habilitar self-service até concluir os itens 1 a 6
 acima. Também não ampliar o escopo para financeiro, treinos, agenda, catracas ou integrações antes

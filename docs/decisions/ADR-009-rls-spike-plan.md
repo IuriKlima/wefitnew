@@ -2,11 +2,12 @@
 
 ## Status
 
-Proposto. Aguardando aprovacao humana para execucao.
+Concluido. O spike foi executado em PostgreSQL 17 com 50/50 casos aprovados.
 
-Este plano nao autoriza alterar tabelas reais, schema Prisma ou migrations. Todos os objetos do
-spike devem existir somente em banco PostgreSQL descartavel terminado em `_test`, dentro de schema
-dedicado.
+Durante a execucao, todos os objetos do spike permaneceram em banco PostgreSQL descartavel
+terminado em `_test`, dentro do schema dedicado `rls_spike`. O spike nao alterou tabelas reais,
+schema Prisma ou migrations. A implementacao real posterior foi conduzida separadamente e esta
+registrada no ADR-009 e nas migrations do repositorio.
 
 ## Objetivo
 
@@ -45,28 +46,20 @@ O spike nao valida regras de produto nem substitui os testes futuros das tabelas
 As cinco DSNs devem apontar para o mesmo banco descartavel, mas autenticar papeis diferentes.
 Nenhuma assertion pode usar superuser, owner de tabela, membro do owner ou `BYPASSRLS`.
 
-## Artefatos previstos
+## Artefatos executados
 
-Os scripts abaixo sao parte do plano e ainda nao devem ser criados:
+| Artefato                                   | Responsabilidade                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------ |
+| `packages/database/rls-spike/run.mjs`      | orquestracao, preflight, assertions e cleanup em `finally`         |
+| `sql/00-roles-and-schema.sql`              | roles `NOLOGIN` e schema descartavel                               |
+| `sql/01-tables.sql`                        | modelo minimo, constraints e indices                               |
+| `sql/02-context-policies-and-triggers.sql` | helpers, grants, policies, `ENABLE`/`FORCE RLS` e trigger diferida |
+| `sql/90-cleanup.sql`                       | remocao exclusiva dos objetos e roles do spike                     |
+| `src/database.mjs` e `src/seed.mjs`        | conexoes, contexto transacional e dados deterministas              |
+| `test/rls-spike.cases.mjs`                 | matriz automatizada dos 50 casos                                   |
 
-| Ordem | Script previsto                            | Responsabilidade                                                                                       |
-| ----- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| 00    | `spike/rls/00-assert-environment.mjs`      | Validar nomes de banco/schema, DSNs distintas, `current_user`, memberships e `rolbypassrls=false`.     |
-| 01    | `spike/rls/01-setup.sql`                   | Criar schema, roles `NOLOGIN` auxiliares e copias minimas das tabelas IAM, Student e StudentUnit.      |
-| 02    | `spike/rls/02-context-and-policies.sql`    | Criar helpers, grants, policies, `ENABLE` e `FORCE RLS` somente nos objetos do spike.                  |
-| 03    | `spike/rls/03-seed.sql`                    | Semear dois atores, duas organizacoes, duas unidades e grants globais/restritos com IDs deterministas. |
-| 04    | `spike/rls/04-iam-policy-tests.mjs`        | Exercitar Membership, MembershipRole, Role e RolePermission como `wefit_api_spike_test`.               |
-| 05    | `spike/rls/05-pool-isolation-tests.mjs`    | Alternar tenants em pool minimo, concorrencia, commit, rollback, timeout e cancelamento.               |
-| 06    | `spike/rls/06-security-definer-tests.sql`  | Auditar owner, `search_path`, ACL, ausencia de SQL dinamico e tentativas de escalonamento.             |
-| 07    | `spike/rls/07-constraint-leak-tests.mjs`   | Comparar FK, unique, PK, SQLSTATE, mensagens e tempo para linhas ocultas e inexistentes.               |
-| 08    | `spike/rls/08-student-invariant-tests.sql` | Provar a constraint trigger diferida no commit e os casos de soft delete/rollback.                     |
-| 09    | `spike/rls/09-worker-ops-tests.mjs`        | Validar papeis de worker e operacao em transacoes tenant separadas.                                    |
-| 90    | `spike/rls/90-rollback.sql`                | Remover exclusivamente objetos e roles do spike.                                                       |
-| 99    | `spike/rls/99-run-all.mjs`                 | Orquestrar setup, testes e rollback, preservando logs e sempre tentando cleanup.                       |
-
-Scripts JavaScript usarao Prisma apenas por queries parametrizadas. Concatenacao de SQL e
-`$queryRawUnsafe` ficam proibidas, inclusive no spike, exceto DDL estatico executado pelo script
-SQL de migrator.
+O resultado integral e os riscos residuais estao consolidados em
+`docs/architecture/rls-spike-report.md`.
 
 ## Etapas
 
@@ -213,6 +206,8 @@ recursiva fora do banco descartavel explicitamente validado.
 
 ## Gate posterior
 
-Concluir o spike nao autoriza migration nas tabelas reais. O relatorio deve ser revisado por uma
-pessoa responsavel por arquitetura e seguranca. Somente uma aprovacao explicita posterior pode
-autorizar o plano de implementacao RLS.
+A conclusao do spike, isoladamente, nao autorizava migration nas tabelas reais. Essa aprovacao
+posterior ocorreu em etapa separada, e as migrations/policies reais agora existem no repositorio
+com testes automatizados. Ainda faltam a validacao das roles e grants no staging, o benchmark
+representativo e a revisao humana de arquitetura, seguranca e observabilidade antes de producao
+externa.
