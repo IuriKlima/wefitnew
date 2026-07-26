@@ -33,6 +33,9 @@ type AdminRequestOptions = {
   includeUnitContext?: boolean;
 };
 
+const MAX_READ_RETRIES = 2;
+const READ_RETRY_DELAY_MS = 250;
+
 export type AdminAccountState = {
   context: CurrentAccountContext;
   active: ActiveAccountContext | null;
@@ -285,7 +288,7 @@ async function apiRequest<T>(
   options: AdminRequestOptions = {}
 ): Promise<T> {
   const config = readAdminTransportConfig();
-  const response = await fetch(`${config.apiBaseUrl}${path}`, {
+  const request = {
     ...init,
     cache: "no-store",
     headers: {
@@ -296,7 +299,12 @@ async function apiRequest<T>(
         : {}),
       ...init.headers
     }
-  });
+  } satisfies RequestInit;
+  const response = await fetchReadWithRetry(
+    `${config.apiBaseUrl}${path}`,
+    request,
+    isReadRequest(init)
+  );
 
   if (!response.ok) {
     const payload = await readErrorPayload(response);
@@ -307,6 +315,38 @@ async function apiRequest<T>(
   }
 
   return (await response.json()) as T;
+}
+
+async function fetchReadWithRetry(
+  url: string,
+  init: RequestInit,
+  shouldRetry: boolean
+): Promise<Response> {
+  let attempt = 0;
+
+  while (true) {
+    try {
+      const response = await fetch(url, init);
+      if (!shouldRetry || response.status < 500 || attempt >= MAX_READ_RETRIES) {
+        return response;
+      }
+    } catch (error) {
+      if (!shouldRetry || attempt >= MAX_READ_RETRIES) {
+        throw error;
+      }
+    }
+
+    attempt += 1;
+    await wait(READ_RETRY_DELAY_MS * attempt);
+  }
+}
+
+function isReadRequest(init: RequestInit): boolean {
+  return !init.method || init.method.toUpperCase() === "GET";
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function readAuthHeaders(config: AdminTransportConfig): Promise<Record<string, string>> {

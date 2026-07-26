@@ -132,6 +132,27 @@ describe("admin API authentication and account context", () => {
     );
   });
 
+  it("retries a transient server error for read-only requests", async () => {
+    configureSupabaseEnv();
+    mockSupabaseSession("retry-token");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: "Erro temporario" }), { status: 500 })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ selfServiceEnabled: true, onboarding: null }), {
+          status: 200
+        })
+      );
+
+    await expect(getOnboardingAvailability()).resolves.toEqual({
+      selfServiceEnabled: true,
+      onboarding: null
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("uses dedicated student lifecycle and unit endpoints without a unit write scope", async () => {
     configureSupabaseEnv();
     mockSupabaseSession("management-token");

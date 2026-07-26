@@ -17,6 +17,11 @@ export type ActorDatabaseContext = Pick<TenantContext, "actorUserId" | "correlat
 
 export type TenantPermissionScope = "organization" | "contextual";
 
+const DEFAULT_CONTEXT_TRANSACTION_OPTIONS = {
+  maxWait: 8_000,
+  timeout: 15_000
+} as const;
+
 export interface AuthorizedTenantContext extends TenantContext {
   permission: PermissionKey | string;
   permissionScope?: TenantPermissionScope;
@@ -83,10 +88,13 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
       isolationLevel?: Prisma.TransactionIsolationLevel;
     }
   ): Promise<T> {
-    return this.$transaction(async (tx) => {
-      await setDatabaseContext(tx, context);
-      return fn(tx);
-    }, options);
+    return this.$transaction(
+      async (tx) => {
+        await setDatabaseContext(tx, context);
+        return fn(tx);
+      },
+      { ...DEFAULT_CONTEXT_TRANSACTION_OPTIONS, ...options }
+    );
   }
 
   async withActorContext<T>(
@@ -98,10 +106,13 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
       isolationLevel?: Prisma.TransactionIsolationLevel;
     }
   ): Promise<T> {
-    return this.$transaction(async (tx) => {
-      await setDatabaseContext(tx, context);
-      return fn(tx);
-    }, options);
+    return this.$transaction(
+      async (tx) => {
+        await setDatabaseContext(tx, context);
+        return fn(tx);
+      },
+      { ...DEFAULT_CONTEXT_TRANSACTION_OPTIONS, ...options }
+    );
   }
 
   /**
@@ -130,22 +141,25 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
       ...(unitId ? { unitId } : {})
     };
 
-    return this.$transaction(async (tx) => {
-      await setDatabaseContext(tx, effectiveContext);
+    return this.$transaction(
+      async (tx) => {
+        await setDatabaseContext(tx, effectiveContext);
 
-      const allowed = await hasTenantPermission(tx, {
-        actorUserId: context.actorUserId!,
-        organizationId: context.organizationId,
-        permission: context.permission,
-        ...(unitId ? { unitId } : {})
-      });
+        const allowed = await hasTenantPermission(tx, {
+          actorUserId: context.actorUserId!,
+          organizationId: context.organizationId,
+          permission: context.permission,
+          ...(unitId ? { unitId } : {})
+        });
 
-      if (!allowed) {
-        throw new ForbiddenException("Permission denied.");
-      }
+        if (!allowed) {
+          throw new ForbiddenException("Permission denied.");
+        }
 
-      return fn(tx);
-    }, options);
+        return fn(tx);
+      },
+      { ...DEFAULT_CONTEXT_TRANSACTION_OPTIONS, ...options }
+    );
   }
 
   /**
