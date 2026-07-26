@@ -50,6 +50,39 @@ export function DataTable<T>({
   );
 }
 
+export type MobileDataCardField<T> = {
+  key: string;
+  label: string;
+  value: (row: T) => ReactNode;
+};
+
+export function MobileDataCards<T>({
+  fields,
+  getRowKey,
+  label,
+  rows
+}: {
+  fields: Array<MobileDataCardField<T>>;
+  getRowKey: (row: T) => string;
+  label: string;
+  rows: T[];
+}) {
+  return (
+    <section className="wf-mobile-data-cards" aria-label={label}>
+      {rows.map((row) => (
+        <article key={getRowKey(row)}>
+          {fields.map((field, index) => (
+            <div key={field.key} data-primary={index === 0 ? "true" : undefined}>
+              <span>{field.label}</span>
+              <div>{field.value(row)}</div>
+            </div>
+          ))}
+        </article>
+      ))}
+    </section>
+  );
+}
+
 export function getPaginationItems(currentPage: number, totalPages: number): number[] {
   if (totalPages <= 5) {
     return Array.from({ length: totalPages }, (_value, index) => index + 1);
@@ -227,3 +260,5 @@ export function StepProgress({ currentStep, steps }: { currentStep: number; step
     </ol>
   );
 }
+
+export const Stepper = StepProgress;

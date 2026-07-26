@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useFormStatus } from "react-dom";
 
-import { Button, Select } from "@gym-platform/ui";
+import { Button, OrganizationSwitcher, Select, UnitSwitcher } from "@gym-platform/ui";
 
 import type { AdminAccountState } from "../lib/admin-api";
 import { selectActiveOrganizationAction, selectActiveUnitAction } from "./actions";
@@ -16,7 +16,7 @@ export function ContextSelector({ state }: { state: AdminAccountState }) {
     return (
       <div className="context-empty" role="status">
         <strong>Sem acesso</strong>
-        <span>Nenhuma organizacao ativa foi encontrada para esta conta.</span>
+        <span>Nenhuma organização ativa foi encontrada para esta conta.</span>
       </div>
     );
   }
@@ -24,33 +24,37 @@ export function ContextSelector({ state }: { state: AdminAccountState }) {
   return (
     <div className="context-controls" aria-label="Contexto ativo">
       {context.organizations.length > 1 ? (
-        <form action={selectActiveOrganizationAction}>
-          <input type="hidden" name="returnTo" value={pathname} />
-          <label>
-            <span>Organização</span>
-            <Select name="organizationId" defaultValue={active.organization.id}>
+        <OrganizationSwitcher>
+          <form action={selectActiveOrganizationAction}>
+            <input type="hidden" name="returnTo" value={pathname} />
+            <Select
+              name="organizationId"
+              aria-label="Organização ativa"
+              defaultValue={active.organization.id}
+            >
               {context.organizations.map((organization) => (
                 <option key={organization.id} value={organization.id}>
                   {organization.name}
                 </option>
               ))}
             </Select>
-          </label>
-          <ContextSubmitButton label="Trocar" />
-        </form>
+            <ContextSubmitButton label="Trocar" />
+          </form>
+        </OrganizationSwitcher>
       ) : (
-        <div className="context-summary">
-          <strong>{active.organization.name}</strong>
-          <span>{active.organization.type}</span>
-        </div>
+        <OrganizationSwitcher>
+          <div className="context-summary">
+            <strong>{active.organization.name}</strong>
+            <span>{active.organization.type}</span>
+          </div>
+        </OrganizationSwitcher>
       )}
 
-      <form action={selectActiveUnitAction}>
-        <input type="hidden" name="returnTo" value={pathname} />
-        <input type="hidden" name="organizationId" value={active.organization.id} />
-        <label>
-          <span>Unidade</span>
-          <Select name="unitId" defaultValue={active.unit?.id ?? ""}>
+      <UnitSwitcher>
+        <form action={selectActiveUnitAction}>
+          <input type="hidden" name="returnTo" value={pathname} />
+          <input type="hidden" name="organizationId" value={active.organization.id} />
+          <Select name="unitId" aria-label="Unidade ativa" defaultValue={active.unit?.id ?? ""}>
             {active.organization.isGlobalMember ? (
               <option value="">Todas as unidades</option>
             ) : null}
@@ -60,9 +64,9 @@ export function ContextSelector({ state }: { state: AdminAccountState }) {
               </option>
             ))}
           </Select>
-        </label>
-        <ContextSubmitButton label="Aplicar" />
-      </form>
+          <ContextSubmitButton label="Aplicar" />
+        </form>
+      </UnitSwitcher>
     </div>
   );
 }

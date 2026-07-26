@@ -1,42 +1,25 @@
-import { isFeatureEnabled, type ActiveAccountContext } from "@gym-platform/contracts";
-import type { NavigationItem } from "@gym-platform/ui";
+import type { ActiveAccountContext } from "@gym-platform/contracts";
+import type { NavigationSection } from "@gym-platform/ui";
 
-const studentsFeatureKey = "students.manage";
-const studentReadPermission = "student:read";
+import {
+  buildModuleNavigation,
+  getAdminModule,
+  hasPermissionInActiveScope,
+  resolveAdminModuleAccess
+} from "./module-catalog";
+
 const studentManagePermission = "student:manage";
 
 export function buildAdminNavigation(
   active: ActiveAccountContext,
   pathname: string
-): NavigationItem[] {
-  const navigation: NavigationItem[] = [
-    {
-      href: "/",
-      icon: "home",
-      isActive: pathname === "/",
-      label: "Início"
-    }
-  ];
-
-  if (canAccessStudents(active)) {
-    navigation.push({
-      href: "/students",
-      icon: "students",
-      isActive: pathname === "/students" || pathname.startsWith("/students/"),
-      label: "Alunos"
-    });
-  }
-
-  return navigation;
+): NavigationSection[] {
+  return buildModuleNavigation(active, pathname);
 }
 
 export function canAccessStudents(active: ActiveAccountContext): boolean {
-  if (!hasPermissionInActiveScope(active, studentReadPermission)) {
-    return false;
-  }
-
-  const subscription = active.organization.subscription;
-  return !subscription || isFeatureEnabled(subscription.features, studentsFeatureKey);
+  const access = resolveAdminModuleAccess(getAdminModule("students"), active);
+  return access.visible && access.state === "available";
 }
 
 export function canManageStudents(active: ActiveAccountContext): boolean {
@@ -46,14 +29,4 @@ export function canManageStudents(active: ActiveAccountContext): boolean {
   );
 }
 
-export function hasPermissionInActiveScope(
-  active: ActiveAccountContext,
-  permission: string
-): boolean {
-  const organizationPermissions = active.organization.permissions.organization;
-  const unitPermissions = active.unit
-    ? (active.organization.permissions.units[active.unit.id] ?? [])
-    : [];
-
-  return organizationPermissions.includes(permission) || unitPermissions.includes(permission);
-}
+export { hasPermissionInActiveScope };

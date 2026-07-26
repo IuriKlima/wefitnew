@@ -3,24 +3,40 @@
 import { useState, type ReactNode } from "react";
 
 import { Drawer } from "./overlays.js";
-import { IconButton, SearchInput, WefitIcon, type IconName } from "./primitives.js";
+import {
+  IconButton,
+  SearchInput,
+  StatusBadge,
+  WefitIcon,
+  type IconName,
+  type StatusTone
+} from "./primitives.js";
 import { joinClassNames } from "./utils.js";
 
 export type NavigationItem = {
+  badge?: string;
+  badgeTone?: StatusTone;
+  description?: string;
   href: string;
   icon: IconName;
   isActive?: boolean;
   label: string;
 };
 
+export type NavigationSection = {
+  id: string;
+  label: string;
+  items: NavigationItem[];
+};
+
 export function Sidebar({
   collapsed,
-  items,
+  sections,
   onCollapse,
   onNavigate
 }: {
   collapsed: boolean;
-  items: NavigationItem[];
+  sections: NavigationSection[];
   onCollapse: () => void;
   onNavigate?: () => void;
 }) {
@@ -39,20 +55,94 @@ export function Sidebar({
         />
       </div>
       <nav aria-label="Navegação principal">
-        {items.map((item) => (
-          <a
-            key={item.href}
-            href={item.href}
-            aria-current={item.isActive ? "page" : undefined}
-            onClick={onNavigate}
-          >
-            <WefitIcon name={item.icon} />
-            <span>{item.label}</span>
-          </a>
+        {sections.map((section) => (
+          <SidebarSection
+            collapsed={collapsed}
+            items={section.items}
+            key={section.id}
+            label={section.label}
+            {...(onNavigate ? { onNavigate } : {})}
+          />
         ))}
       </nav>
       <small>Gestão clara. Operação segura.</small>
     </aside>
+  );
+}
+
+export function SidebarSection({
+  collapsed,
+  items,
+  label,
+  onNavigate
+}: {
+  collapsed: boolean;
+  items: NavigationItem[];
+  label: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <section className="wf-sidebar-section" aria-label={label}>
+      <span className="wf-sidebar-section__label" aria-hidden={collapsed || undefined}>
+        {label}
+      </span>
+      <div>
+        {items.map((item) => (
+          <SidebarItem
+            collapsed={collapsed}
+            item={item}
+            key={item.href}
+            {...(onNavigate ? { onNavigate } : {})}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function SidebarItem({
+  collapsed,
+  item,
+  onNavigate
+}: {
+  collapsed: boolean;
+  item: NavigationItem;
+  onNavigate?: () => void;
+}) {
+  return (
+    <a
+      href={item.href}
+      aria-current={item.isActive ? "page" : undefined}
+      onClick={onNavigate}
+      title={collapsed ? item.label : undefined}
+    >
+      <WefitIcon name={item.icon} />
+      <span className="wf-sidebar-item__copy">
+        <span>{item.label}</span>
+        {item.description ? <small>{item.description}</small> : null}
+      </span>
+      {item.badge ? (
+        <StatusBadge {...(item.badgeTone ? { tone: item.badgeTone } : {})}>
+          {item.badge}
+        </StatusBadge>
+      ) : null}
+    </a>
+  );
+}
+
+export function MobileNavigation({
+  onClose,
+  open,
+  sections
+}: {
+  onClose: () => void;
+  open: boolean;
+  sections: NavigationSection[];
+}) {
+  return (
+    <Drawer open={open} onClose={onClose} label="Menu principal">
+      <Sidebar collapsed={false} sections={sections} onCollapse={onClose} onNavigate={onClose} />
+    </Drawer>
   );
 }
 
@@ -90,7 +180,7 @@ export function AppShell({
 }: {
   children: ReactNode;
   contextSelector: ReactNode;
-  navigation: NavigationItem[];
+  navigation: NavigationSection[];
   profile: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -104,18 +194,15 @@ export function AppShell({
       <div className="wf-desktop-sidebar">
         <Sidebar
           collapsed={collapsed}
-          items={navigation}
+          sections={navigation}
           onCollapse={() => setCollapsed((value) => !value)}
         />
       </div>
-      <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} label="Menu principal">
-        <Sidebar
-          collapsed={false}
-          items={navigation}
-          onCollapse={() => setMobileOpen(false)}
-          onNavigate={() => setMobileOpen(false)}
-        />
-      </Drawer>
+      <MobileNavigation
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        sections={navigation}
+      />
       <div className="wf-workspace">
         <Topbar
           contextSelector={contextSelector}

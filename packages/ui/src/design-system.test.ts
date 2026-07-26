@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { getPaginationItems } from "./data-display.js";
-import { StatusBadge } from "./primitives.js";
+import { PageHeader, PermissionBoundary } from "./layout.js";
+import { StatusBadge, WefitIcon } from "./primitives.js";
 
 describe("Wefit design system", () => {
   it("keeps pagination bounded around the current page", () => {
@@ -19,6 +20,26 @@ describe("Wefit design system", () => {
     );
   });
 
+  it("exposes reusable page, permission and module icon primitives", () => {
+    const header = PageHeader({ title: "Alunos", eyebrow: "Operação" });
+    const allowed = PermissionBoundary({
+      allowed: true,
+      children: "conteúdo",
+      fallback: "bloqueado"
+    });
+    const blocked = PermissionBoundary({
+      allowed: false,
+      children: "conteúdo",
+      fallback: "bloqueado"
+    });
+    const icon = WefitIcon({ name: "team" });
+
+    expect((header.props as { className: string }).className).toBe("wf-page-header");
+    expect(allowed).toBe("conteúdo");
+    expect(blocked).toBe("bloqueado");
+    expect(icon.type).toBe("svg");
+  });
+
   it("centralizes required colors, target size, focus and reduced motion", async () => {
     const [tokens, components] = await Promise.all([
       readFile("src/tokens.css", "utf8"),
@@ -32,6 +53,9 @@ describe("Wefit design system", () => {
     expect(tokens).toContain("--wf-control-height: 44px");
     expect(components).toContain("box-shadow: var(--wf-focus-ring)");
     expect(components).toContain("contain: layout inline-size");
+    expect(components).toContain(".wf-page-header");
+    expect(components).toContain(".wf-mobile-data-cards");
+    expect(components).toContain(".wf-sidebar-section");
     expect(components).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });

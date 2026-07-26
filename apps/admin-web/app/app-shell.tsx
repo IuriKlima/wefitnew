@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { AppShell as WefitAppShell, Button } from "@gym-platform/ui";
+import { AppShell as WefitAppShell, Avatar, Button, DropdownMenu } from "@gym-platform/ui";
 
 import { ContextSelector } from "./context/context-selector";
 import type { AdminAccountState } from "./lib/admin-api";
@@ -34,16 +34,32 @@ export function AppShell({ accountState, children, usesSupabaseAuth }: AppShellP
       contextSelector={<ContextSelector state={accountState} />}
       navigation={navigation}
       profile={
-        <div className="account-actions">
-          <span>{accountState.context.user.name ?? "Conta sem perfil"}</span>
+        <DropdownMenu
+          label="Menu da conta"
+          trigger={
+            <span className="profile-trigger">
+              <Avatar name={accountState.context.user.name ?? "Conta Wefit"} />
+              <span>
+                <strong>{accountState.context.user.name ?? "Conta sem perfil"}</strong>
+                <small>{accountState.active.organization.name}</small>
+              </span>
+            </span>
+          }
+        >
+          <div className="profile-menu-summary">
+            <strong>{accountState.context.user.name ?? "Conta Wefit"}</strong>
+            <span>{accountState.active.organization.name}</span>
+          </div>
           {usesSupabaseAuth ? (
             <form action={logoutAction}>
               <Button size="small" type="submit">
-                Sair
+                Sair com segurança
               </Button>
             </form>
-          ) : null}
-        </div>
+          ) : (
+            <span className="profile-dev-session">Sessão local de desenvolvimento</span>
+          )}
+        </DropdownMenu>
       }
     >
       {children}

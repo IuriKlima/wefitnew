@@ -6,11 +6,14 @@ import {
   EmptyState,
   ErrorState,
   FilterBar,
+  MobileDataCards,
+  PageHeader,
   Pagination,
   SearchInput,
   Select,
   StatusBadge,
-  type DataTableColumn
+  type DataTableColumn,
+  type MobileDataCardField
 } from "@gym-platform/ui";
 
 import { AdminApiError, getAdminAccountState, listStudents } from "../lib/admin-api";
@@ -43,18 +46,19 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
 
     return (
       <main className="content">
-        <div className="page-heading">
-          <div>
-            <span className="eyebrow">CRM operacional</span>
-            <h1>Alunos</h1>
-            <p>Consulte e mantenha os cadastros autorizados da organização.</p>
-          </div>
-          {canManage ? (
-            <Link className="button button-primary" href="/students/new">
-              Novo aluno
-            </Link>
-          ) : null}
-        </div>
+        <PageHeader
+          breadcrumb={[{ label: "Visão geral", href: "/" }, { label: "Alunos" }]}
+          eyebrow="CRM operacional"
+          title="Alunos"
+          description="Consulte e mantenha os cadastros autorizados da organização."
+          actions={
+            canManage ? (
+              <Link className="button button-primary" href="/students/new">
+                Novo aluno
+              </Link>
+            ) : null
+          }
+        />
 
         <FilterBar action="/students" method="get" aria-label="Filtros de alunos">
           <SearchInput
@@ -123,12 +127,22 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
             }
           />
         ) : (
-          <DataTable
-            caption="Lista de alunos"
-            columns={studentColumns}
-            getRowKey={({ id }) => id}
-            rows={students.data}
-          />
+          <>
+            <div className="student-desktop-table">
+              <DataTable
+                caption="Lista de alunos"
+                columns={studentColumns}
+                getRowKey={({ id }) => id}
+                rows={students.data}
+              />
+            </div>
+            <MobileDataCards
+              fields={studentMobileFields}
+              getRowKey={({ id }) => id}
+              label="Lista de alunos em cartões"
+              rows={students.data}
+            />
+          </>
         )}
 
         <div className="student-list-footer">
@@ -208,6 +222,52 @@ const studentColumns: Array<DataTableColumn<Student>> = [
     cell: (student) => (
       <Link className="button button-small" href={`/students/${student.id}`}>
         Abrir
+      </Link>
+    )
+  }
+];
+
+const studentMobileFields: Array<MobileDataCardField<Student>> = [
+  {
+    key: "student",
+    label: "Aluno",
+    value: (student) => (
+      <span className="table-primary-cell">
+        <strong>{displayStudentName(student)}</strong>
+        {student.socialName ? <small>{student.name}</small> : null}
+      </span>
+    )
+  },
+  {
+    key: "contact",
+    label: "Contato",
+    value: (student) => (
+      <span className="table-primary-cell">
+        <span>{student.email ?? "Sem e-mail"}</span>
+        <small>{student.phone ?? "Sem telefone"}</small>
+      </span>
+    )
+  },
+  {
+    key: "units",
+    label: "Unidades",
+    value: (student) => student.units.map(({ name }) => name).join(", ") || "Sem unidade"
+  },
+  {
+    key: "status",
+    label: "Status",
+    value: (student) => (
+      <StatusBadge tone={student.status === "ACTIVE" ? "success" : "warning"}>
+        {student.status === "ACTIVE" ? "Ativo" : "Inativo"}
+      </StatusBadge>
+    )
+  },
+  {
+    key: "actions",
+    label: "Ações",
+    value: (student) => (
+      <Link className="button button-small" href={`/students/${student.id}`}>
+        Abrir cadastro
       </Link>
     )
   }

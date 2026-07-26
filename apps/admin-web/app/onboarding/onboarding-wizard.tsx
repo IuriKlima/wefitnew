@@ -11,6 +11,8 @@ import { isOnboardingPlanCompatible, onboardingPlans } from "@gym-platform/contr
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
+import { Stepper } from "@gym-platform/ui";
+
 import type { OnboardingStep, OnboardingStepPayload } from "../lib/admin-api";
 import { logoutAction } from "../logout/actions";
 import {
@@ -197,24 +199,7 @@ export function OnboardingWizard({ initialOnboarding, selfServiceEnabled }: Onbo
       <aside className="onboarding-progress" aria-label="Progresso da configuracao">
         <span className="brand">Wefit</span>
         <p>Configuracao inicial</p>
-        <ol>
-          {wizardSteps.map((label, index) => {
-            const stepNumber = index + 1;
-            const isDone = stepNumber < onboarding.currentStep;
-            const isCurrent = stepNumber === visibleStep;
-            return (
-              <li
-                className={isCurrent ? "is-current" : isDone ? "is-done" : undefined}
-                key={label}
-                aria-current={isCurrent ? "step" : undefined}
-                aria-label={stepNumber > onboarding.currentStep ? `${label}, etapa futura` : label}
-              >
-                <span>{isDone ? "OK" : stepNumber}</span>
-                {label}
-              </li>
-            );
-          })}
-        </ol>
+        <Stepper currentStep={visibleStep} steps={[...wizardSteps]} />
         <div className="onboarding-secondary-actions">
           <form action={logoutAction}>
             <button className="button button-ghost" type="submit" disabled={isPending}>

@@ -1140,6 +1140,130 @@ td span {
   color: var(--muted);
 }
 
+.dashboard-module-grid,
+.module-preview-grid {
+  display: grid;
+  gap: var(--wf-space-4);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.module-preview-page {
+  align-content: start;
+}
+
+.module-context-grid {
+  display: grid;
+  gap: var(--wf-space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.module-context-grid > article {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--wf-radius-md);
+  display: grid;
+  gap: var(--wf-space-1);
+  min-width: 0;
+  padding: var(--wf-space-4);
+}
+
+.module-context-grid span {
+  color: var(--muted);
+  font-size: var(--wf-font-size-xs);
+  font-weight: var(--wf-font-weight-semibold);
+}
+
+.module-context-grid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-trigger {
+  align-items: center;
+  display: flex;
+  gap: var(--wf-space-2);
+  padding-inline: var(--wf-space-1);
+}
+
+.profile-trigger > span:last-child,
+.profile-menu-summary {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+}
+
+.profile-trigger strong,
+.profile-trigger small {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-trigger strong {
+  font-size: var(--wf-font-size-sm);
+}
+
+.profile-trigger small,
+.profile-menu-summary span,
+.profile-dev-session {
+  color: var(--muted);
+  font-size: var(--wf-font-size-xs);
+}
+
+.profile-menu-summary {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--wf-space-3);
+}
+
+.profile-menu-summary span {
+  overflow-wrap: anywhere;
+}
+
+.wf-dropdown__content form,
+.wf-dropdown__content .wf-button {
+  width: 100%;
+}
+
+.context-controls .wf-context-switcher form {
+  align-items: center;
+  display: flex;
+  gap: var(--wf-space-2);
+}
+
+.context-controls .wf-context-switcher .wf-select {
+  min-width: 150px;
+}
+
+.onboarding-progress .wf-step-progress li {
+  color: #aebdca;
+}
+
+.onboarding-progress .wf-step-progress li[data-state="current"] {
+  background: rgb(255 255 255 / 9%);
+  color: #ffffff;
+}
+
+.onboarding-progress .wf-step-progress li[data-state="done"] {
+  color: #d8e8e5;
+}
+
+.onboarding-progress .wf-step-progress li[data-state="current"] > span,
+.onboarding-progress .wf-step-progress li[data-state="done"] > span {
+  background: var(--wf-color-brand-primary);
+  border-color: var(--wf-color-brand-primary);
+  color: #102f2b;
+}
+
+@media (max-width: 1180px) {
+  .dashboard-metrics,
+  .dashboard-module-grid,
+  .module-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 860px) {
   .admin-shell {
     grid-template-columns: 1fr;
@@ -1197,6 +1321,10 @@ td span {
   .plan-grid,
   .business-type-grid,
   .modality-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .module-context-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1320,5 +1448,26 @@ td span {
   .onboarding-summary,
   .password-checks {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .student-desktop-table {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard-module-grid,
+  .module-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-trigger > span:last-child {
+    display: none;
+  }
+
+  .wf-context-switcher > span {
+    display: none;
   }
 }
