@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { OnboardingOpeningHours, OrganizationOnboardingView } from "@gym-platform/contracts";
+import { Prisma } from "@gym-platform/database";
 
 import { createTestApp } from "../test-app.js";
 import {
@@ -315,6 +316,75 @@ describe("guided organization onboarding integration", () => {
       company: { businessEmail: "contato@wefit.test" },
       responsible: { email: "owner@example.test" }
     });
+  });
+
+  it("rejects a legacy responsible spoof during completion and rolls back the transaction", async () => {
+    let view = await preparePlanStep(currentActorUserId, "owner@example.test", "GYM");
+    view = parseView(
+      (
+        await patchStep(currentActorUserId, "plan", {
+          version: view.version,
+          selectedPlanCode: "GYM"
+        })
+      ).payload
+    );
+    const persisted = await prisma.organizationOnboarding.findUniqueOrThrow({
+      where: { id: view.id }
+    });
+    const persistedPayload = persisted.payload as Prisma.JsonObject;
+    await prisma.organizationOnboarding.update({
+      where: { id: view.id },
+      data: {
+        payload: {
+          ...persistedPayload,
+          responsible: {
+            name: "Terceiro legado",
+            email: "third-party@example.test",
+            phone: "11999998888"
+          }
+        }
+      }
+    });
+
+    const beforeOrganization = await prisma.organization.findUniqueOrThrow({
+      where: { id: view.organizationId }
+    });
+    const beforeUnit = await prisma.unit.findFirstOrThrow({
+      where: { organizationId: view.organizationId }
+    });
+    const beforeOnboarding = await prisma.organizationOnboarding.findUniqueOrThrow({
+      where: { id: view.id }
+    });
+    const beforeAuditCount = await prisma.auditLog.count({
+      where: { organizationId: view.organizationId }
+    });
+
+    const response = await completeOnboarding(currentActorUserId, view.version);
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.payload)).toMatchObject({
+      code: "ONBOARDING_RESPONSIBLE_IDENTITY_MISMATCH"
+    });
+    expect(
+      await prisma.user.findUniqueOrThrow({ where: { id: currentActorUserId } })
+    ).toMatchObject({
+      email: "owner@example.test",
+      deletedAt: null
+    });
+    expect(
+      await prisma.organization.findUniqueOrThrow({ where: { id: view.organizationId } })
+    ).toEqual(beforeOrganization);
+    expect(
+      await prisma.unit.findFirstOrThrow({ where: { organizationId: view.organizationId } })
+    ).toEqual(beforeUnit);
+    expect(
+      await prisma.organizationOnboarding.findUniqueOrThrow({ where: { id: view.id } })
+    ).toEqual(beforeOnboarding);
+    expect(await prisma.auditLog.count({ where: { organizationId: view.organizationId } })).toBe(
+      beforeAuditCount
+    );
+    expect(beforeOrganization.lifecycle).toBe("ONBOARDING");
+    expect(beforeOnboarding.status).toBe("IN_PROGRESS");
   });
 
   it("persists all seven steps and activates the tenant in one completion transaction", async () => {

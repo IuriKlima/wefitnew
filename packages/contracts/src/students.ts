@@ -1,4 +1,6 @@
 export type StudentStatus = "ACTIVE" | "INACTIVE";
+export type StudentSortField = "name" | "status" | "createdAt" | "updatedAt";
+export type SortDirection = "asc" | "desc";
 
 export type UnitSummary = {
   id: string;
@@ -36,19 +38,49 @@ export type Student = {
 
 export type PaginatedStudents = Paginated<Student>;
 
-export type StudentPayload = {
+export type StudentDetailsPayload = {
   name: string;
   socialName?: string | null;
   email?: string | null;
   phone?: string | null;
   birthDate?: string | null;
   operationalNote?: string | null;
+};
+
+export type StudentPayload = StudentDetailsPayload & {
   status?: StudentStatus;
   unitIds?: string[];
 };
 
 export type ListStudentsInput = {
   page?: string | undefined;
+  pageSize?: string | undefined;
   search?: string | undefined;
   status?: StudentStatus | undefined;
+  unitId?: string | undefined;
+  sortBy?: StudentSortField | undefined;
+  sortDirection?: SortDirection | undefined;
+};
+
+export type StudentAuditAction =
+  | "student.created"
+  | "student.updated"
+  | "student.inactivated"
+  | "student.reactivated"
+  | "student.unit_linked"
+  | "student.unit_unlinked";
+
+export type StudentAuditMetadata = {
+  changedFields?: string[];
+  statusBefore?: StudentStatus;
+  statusAfter?: StudentStatus;
+  unitId?: string;
+  unitIds?: string[];
+};
+
+export type StudentAuditEvent = {
+  id: string;
+  action: StudentAuditAction;
+  occurredAt: string;
+  metadata: StudentAuditMetadata;
 };

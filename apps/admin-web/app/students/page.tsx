@@ -1,170 +1,214 @@
 import Link from "next/link";
 
 import type { Student } from "@gym-platform/contracts";
+import {
+  DataTable,
+  EmptyState,
+  ErrorState,
+  FilterBar,
+  Pagination,
+  SearchInput,
+  Select,
+  StatusBadge,
+  type DataTableColumn
+} from "@gym-platform/ui";
 
-import { AdminApiError, listStudents } from "../lib/admin-api";
+import { AdminApiError, getAdminAccountState, listStudents } from "../lib/admin-api";
+import { canManageStudents } from "../lib/navigation";
 import { displayStudentName } from "./student-format";
+import {
+  buildStudentsHref,
+  parseStudentListQuery,
+  type StudentSearchParams
+} from "./student-list-query";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Record<string, string | string[] | undefined>;
-
 type StudentsPageProps = {
-  searchParams: Promise<SearchParams>;
+  searchParams: Promise<StudentSearchParams>;
 };
 
 export default async function StudentsPage({ searchParams }: StudentsPageProps) {
-  const params = await searchParams;
-  const search = readParam(params.search);
-  const status = readStatusParam(params.status);
-  const page = readParam(params.page) ?? "1";
+  const query = parseStudentListQuery(await searchParams);
 
   try {
-    const students = await listStudents({
-      page,
-      search,
-      status
-    });
+    const { active } = await getAdminAccountState();
+    if (!active) {
+      throw new AdminApiError("Sua conta não possui acesso ativo a uma organização.", 403);
+    }
+
+    const students = await listStudents(query, active);
+    const canManage = canManageStudents(active);
+    const hasFilters = Boolean(query.search || query.status || query.unitId);
 
     return (
       <main className="content">
         <div className="page-heading">
           <div>
-            <span className="eyebrow">Fase 1A</span>
+            <span className="eyebrow">CRM operacional</span>
             <h1>Alunos</h1>
+            <p>Consulte e mantenha os cadastros autorizados da organização.</p>
           </div>
-          <Link className="button button-primary" href="/students/new">
-            Novo aluno
-          </Link>
+          {canManage ? (
+            <Link className="button button-primary" href="/students/new">
+              Novo aluno
+            </Link>
+          ) : null}
         </div>
 
-        <section className="toolbar" aria-label="Filtros de alunos">
-          <form className="filters" action="/students">
-            <label>
-              <span>Busca</span>
-              <input
-                type="search"
-                name="search"
-                placeholder="Nome, e-mail ou telefone"
-                defaultValue={search}
-              />
-            </label>
-            <label>
-              <span>Status</span>
-              <select name="status" defaultValue={status ?? ""}>
-                <option value="">Todos</option>
-                <option value="ACTIVE">Ativos</option>
-                <option value="INACTIVE">Inativos</option>
-              </select>
-            </label>
-            <button className="button" type="submit">
-              Filtrar
-            </button>
-          </form>
-        </section>
+        <FilterBar action="/students" method="get" aria-label="Filtros de alunos">
+          <SearchInput
+            name="search"
+            aria-label="Buscar alunos"
+            placeholder="Nome, nome social, e-mail ou telefone"
+            defaultValue={query.search}
+          />
+          <Select name="status" aria-label="Filtrar por status" defaultValue={query.status ?? ""}>
+            <option value="">Todos os status</option>
+            <option value="ACTIVE">Ativos</option>
+            <option value="INACTIVE">Inativos</option>
+          </Select>
+          <Select name="unitId" aria-label="Filtrar por unidade" defaultValue={query.unitId ?? ""}>
+            <option value="">Todas as unidades</option>
+            {active.organization.units.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
+              </option>
+            ))}
+          </Select>
+          <Select name="sortBy" aria-label="Ordenar por" defaultValue={query.sortBy}>
+            <option value="name">Nome</option>
+            <option value="status">Status</option>
+            <option value="createdAt">Cadastro</option>
+            <option value="updatedAt">Atualização</option>
+          </Select>
+          <Select
+            name="sortDirection"
+            aria-label="Direção da ordenação"
+            defaultValue={query.sortDirection}
+          >
+            <option value="asc">Crescente</option>
+            <option value="desc">Decrescente</option>
+          </Select>
+          <Select name="pageSize" aria-label="Itens por página" defaultValue={query.pageSize}>
+            <option value="10">10 por página</option>
+            <option value="20">20 por página</option>
+            <option value="50">50 por página</option>
+            <option value="100">100 por página</option>
+          </Select>
+          <button className="button button-primary" type="submit">
+            Aplicar
+          </button>
+          {hasFilters ? (
+            <Link className="button" href="/students">
+              Limpar
+            </Link>
+          ) : null}
+        </FilterBar>
 
         {students.data.length === 0 ? (
-          <EmptyStudentsState hasFilters={Boolean(search || status)} />
+          <EmptyState
+            title={hasFilters ? "Nenhum aluno encontrado" : "Nenhum aluno cadastrado"}
+            description={
+              hasFilters
+                ? "Limpe ou ajuste os filtros para ampliar os resultados."
+                : "Cadastre o primeiro aluno para iniciar a operação."
+            }
+            action={
+              canManage ? (
+                <Link className="button button-primary" href="/students/new">
+                  Novo aluno
+                </Link>
+              ) : undefined
+            }
+          />
         ) : (
-          <StudentsTable students={students.data} />
+          <DataTable
+            caption="Lista de alunos"
+            columns={studentColumns}
+            getRowKey={({ id }) => id}
+            rows={students.data}
+          />
         )}
 
-        <footer className="pagination-summary">
-          Pagina {students.pagination.page} de {students.pagination.totalPages} -{" "}
-          {students.pagination.total} aluno(s)
-        </footer>
+        <div className="student-list-footer">
+          <p>
+            {students.pagination.total} aluno(s) · página {students.pagination.page} de{" "}
+            {students.pagination.totalPages}
+          </p>
+          <Pagination
+            currentPage={students.pagination.page}
+            totalPages={students.pagination.totalPages}
+            buildHref={(page) => buildStudentsHref(query, page)}
+          />
+        </div>
       </main>
     );
   } catch (error) {
-    return <AdminErrorState error={error} />;
+    const message =
+      error instanceof AdminApiError || error instanceof Error
+        ? error.message
+        : "Não foi possível carregar os alunos.";
+
+    return (
+      <main className="content">
+        <ErrorState
+          title="Alunos indisponíveis"
+          description={message}
+          action={
+            <Link className="button" href="/students">
+              Tentar novamente
+            </Link>
+          }
+        />
+      </main>
+    );
   }
 }
 
-function StudentsTable({ students }: { students: Student[] }) {
-  return (
-    <section className="table-surface" aria-label="Lista de alunos">
-      <table>
-        <thead>
-          <tr>
-            <th>Aluno</th>
-            <th>Contato</th>
-            <th>Unidades</th>
-            <th>Status</th>
-            <th aria-label="Acoes" />
-          </tr>
-        </thead>
-        <tbody>
-          {students.map((student) => (
-            <tr key={student.id}>
-              <td>
-                <strong>{displayStudentName(student)}</strong>
-                {student.socialName ? <span className="muted">{student.name}</span> : null}
-              </td>
-              <td>
-                <span>{student.email ?? "Sem e-mail"}</span>
-                <span className="muted">{student.phone ?? "Sem telefone"}</span>
-              </td>
-              <td>
-                {student.units.length > 0
-                  ? student.units.map((unit) => unit.name).join(", ")
-                  : "Sem vinculo"}
-              </td>
-              <td>
-                <span className={`status-pill status-pill-${student.status.toLowerCase()}`}>
-                  {student.status === "ACTIVE" ? "Ativo" : "Inativo"}
-                </span>
-              </td>
-              <td className="actions-cell">
-                <Link className="button button-small" href={`/students/${student.id}`}>
-                  Abrir
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function EmptyStudentsState({ hasFilters }: { hasFilters: boolean }) {
-  return (
-    <section className="empty-state">
-      <h2>{hasFilters ? "Nenhum aluno encontrado" : "Nenhum aluno cadastrado"}</h2>
-      <p>
-        {hasFilters
-          ? "Ajuste a busca ou o status para ampliar os resultados."
-          : "Cadastre o primeiro aluno para iniciar a operacao da unidade."}
-      </p>
-      <Link className="button button-primary" href="/students/new">
-        Novo aluno
+const studentColumns: Array<DataTableColumn<Student>> = [
+  {
+    key: "student",
+    header: "Aluno",
+    cell: (student) => (
+      <span className="table-primary-cell">
+        <strong>{displayStudentName(student)}</strong>
+        {student.socialName ? <small>{student.name}</small> : null}
+      </span>
+    )
+  },
+  {
+    key: "contact",
+    header: "Contato",
+    cell: (student) => (
+      <span className="table-primary-cell">
+        <span>{student.email ?? "Sem e-mail"}</span>
+        <small>{student.phone ?? "Sem telefone"}</small>
+      </span>
+    )
+  },
+  {
+    key: "units",
+    header: "Unidades",
+    cell: (student) => student.units.map(({ name }) => name).join(", ")
+  },
+  {
+    key: "status",
+    header: "Status",
+    cell: (student) => (
+      <StatusBadge tone={student.status === "ACTIVE" ? "success" : "warning"}>
+        {student.status === "ACTIVE" ? "Ativo" : "Inativo"}
+      </StatusBadge>
+    )
+  },
+  {
+    key: "actions",
+    header: <span className="wf-visually-hidden">Ações</span>,
+    align: "right",
+    cell: (student) => (
+      <Link className="button button-small" href={`/students/${student.id}`}>
+        Abrir
       </Link>
-    </section>
-  );
-}
-
-function AdminErrorState({ error }: { error: unknown }) {
-  const message =
-    error instanceof AdminApiError || error instanceof Error
-      ? error.message
-      : "Nao foi possivel carregar os alunos.";
-
-  return (
-    <main className="content">
-      <section className="empty-state">
-        <h1>Alunos indisponiveis</h1>
-        <p>{message}</p>
-      </section>
-    </main>
-  );
-}
-
-function readParam(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function readStatusParam(value: string | string[] | undefined): "ACTIVE" | "INACTIVE" | undefined {
-  const status = readParam(value);
-
-  return status === "ACTIVE" || status === "INACTIVE" ? status : undefined;
-}
+    )
+  }
+];

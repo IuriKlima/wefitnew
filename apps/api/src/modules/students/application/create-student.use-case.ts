@@ -5,12 +5,15 @@ import { permissionKeys } from "@gym-platform/permissions";
 import type { CreateStudentInput } from "@gym-platform/validation";
 
 import { PrismaService } from "../../../infrastructure/database/prisma.service.js";
+import { StudentManagementPolicy } from "./student-management.policy.js";
 import { StudentsRepository } from "./students.repository.js";
 
 @Injectable()
 export class CreateStudentUseCase {
   constructor(
     @Inject(StudentsRepository) private readonly studentsRepository: StudentsRepository,
+    @Inject(StudentManagementPolicy)
+    private readonly studentManagementPolicy: StudentManagementPolicy,
     @Inject(PrismaService) private readonly prisma: PrismaService
   ) {}
 
@@ -23,8 +26,10 @@ export class CreateStudentUseCase {
         permission: permissionKeys.studentManage,
         permissionScope: "organization"
       },
-      (transaction) =>
-        this.studentsRepository.create(transaction, input, actorUserId, correlationId)
+      async (transaction) => {
+        await this.studentManagementPolicy.assertEntitled(transaction, input.organizationId);
+        return this.studentsRepository.create(transaction, input, actorUserId, correlationId);
+      }
     );
   }
 }

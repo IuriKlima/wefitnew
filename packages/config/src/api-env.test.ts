@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { loadApiEnv, loadWorkerEnv, parseCorsOrigins } from "./api-env.js";
+import { loadApiEnv, loadWorkerEnv, parseCorsOrigins, parseTrustedProxies } from "./api-env.js";
 
 describe("api env validation", () => {
   it("loads a valid configuration", () => {
@@ -16,6 +16,7 @@ describe("api env validation", () => {
     expect(env.AUTH_ADAPTER).toBe("temporary-header");
     expect(env.ORGANIZATION_SELF_SERVICE_ENABLED).toBe(false);
     expect(env.RATE_LIMIT_STORE).toBe("redis");
+    expect(env.TRUSTED_PROXIES).toBe("");
     expect(parseCorsOrigins(env.CORS_ORIGINS)).toEqual([
       "http://localhost:3000",
       "http://localhost:3001"
@@ -44,6 +45,50 @@ describe("api env validation", () => {
         CORS_ORIGINS: "https://app.example.com"
       })
     ).toThrow("Production rate limiting must use Redis");
+  });
+
+  it("accepts only explicit trusted proxy IPs and CIDRs", () => {
+    const env = loadApiEnv({
+      NODE_ENV: "test",
+      DATABASE_URL: "postgresql://user:password@localhost:5432/app",
+      RATE_LIMIT_STORE: "memory",
+      TRUSTED_PROXIES: "127.0.0.1, 10.0.0.0/8, 2001:db8::/32",
+      CORS_ORIGINS: "http://localhost:3000"
+    });
+
+    expect(parseTrustedProxies(env.TRUSTED_PROXIES)).toEqual([
+      "127.0.0.1",
+      "10.0.0.0/8",
+      "2001:db8::/32"
+    ]);
+  });
+
+  it.each(["*", "0.0.0.0/0", "::/0"])(
+    "rejects the trusted proxy wildcard %s in production",
+    (trustedProxy) => {
+      expect(() =>
+        loadApiEnv({
+          NODE_ENV: "production",
+          AUTH_ADAPTER: "external",
+          DATABASE_URL: "postgresql://user:password@localhost:5432/app",
+          REDIS_URL: "redis://localhost:6379",
+          TRUSTED_PROXIES: trustedProxy,
+          CORS_ORIGINS: "https://app.example.com"
+        })
+      ).toThrow("Wildcard trusted proxies are not allowed");
+    }
+  );
+
+  it("rejects hostnames and malformed trusted proxy entries", () => {
+    expect(() =>
+      loadApiEnv({
+        NODE_ENV: "test",
+        DATABASE_URL: "postgresql://user:password@localhost:5432/app",
+        RATE_LIMIT_STORE: "memory",
+        TRUSTED_PROXIES: "proxy.internal,10.0.0.0/99",
+        CORS_ORIGINS: "http://localhost:3000"
+      })
+    ).toThrow("Invalid trusted proxy entry");
   });
 
   it("rejects missing required connection strings", () => {

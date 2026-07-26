@@ -7,6 +7,9 @@ import type {
   OrganizationOnboardingView,
   PaginatedStudents,
   Student,
+  StudentAuditEvent,
+  StudentDashboardSummary,
+  StudentDetailsPayload,
   StudentPayload,
   UnitSummary
 } from "@gym-platform/contracts";
@@ -109,20 +112,17 @@ export async function getAdminAccountState(): Promise<AdminAccountState> {
   };
 }
 
-export async function listStudents(input: ListStudentsInput): Promise<PaginatedStudents> {
-  const active = await requireActiveContext();
+export async function listStudents(
+  input: ListStudentsInput,
+  activeContext?: ActiveAccountContext
+): Promise<PaginatedStudents> {
+  const active = activeContext ?? (await requireActiveContext());
   const params = new URLSearchParams();
 
-  if (input.page) {
-    params.set("page", input.page);
-  }
-
-  if (input.search) {
-    params.set("search", input.search);
-  }
-
-  if (input.status) {
-    params.set("status", input.status);
+  for (const [key, value] of Object.entries(input)) {
+    if (value) {
+      params.set(key, value);
+    }
   }
 
   const query = params.toString();
@@ -130,22 +130,59 @@ export async function listStudents(input: ListStudentsInput): Promise<PaginatedS
   return apiRequest<PaginatedStudents>(
     `/organizations/${active.organization.id}/students${query ? `?${query}` : ""}`,
     {},
-    { activeContext: active }
+    {
+      activeContext: active,
+      includeUnitContext: !active.organization.isGlobalMember
+    }
   );
 }
 
-export async function getStudent(studentId: string): Promise<Student> {
-  const active = await requireActiveContext();
+export async function getStudentDashboardSummary(
+  activeContext?: ActiveAccountContext
+): Promise<StudentDashboardSummary> {
+  const active = activeContext ?? (await requireActiveContext());
 
-  return apiRequest<Student>(
-    `/organizations/${active.organization.id}/students/${studentId}`,
+  return apiRequest<StudentDashboardSummary>(
+    `/organizations/${active.organization.id}/students/summary`,
     {},
     { activeContext: active }
   );
 }
 
-export async function listUnits(): Promise<UnitSummary[]> {
-  const active = await requireActiveContext();
+export async function getStudent(
+  studentId: string,
+  activeContext?: ActiveAccountContext
+): Promise<Student> {
+  const active = activeContext ?? (await requireActiveContext());
+
+  return apiRequest<Student>(
+    `/organizations/${active.organization.id}/students/${studentId}`,
+    {},
+    {
+      activeContext: active,
+      includeUnitContext: !active.organization.isGlobalMember
+    }
+  );
+}
+
+export async function getStudentHistory(
+  studentId: string,
+  activeContext?: ActiveAccountContext
+): Promise<StudentAuditEvent[]> {
+  const active = activeContext ?? (await requireActiveContext());
+
+  return apiRequest<StudentAuditEvent[]>(
+    `/organizations/${active.organization.id}/students/${studentId}/history`,
+    {},
+    {
+      activeContext: active,
+      includeUnitContext: !active.organization.isGlobalMember
+    }
+  );
+}
+
+export async function listUnits(activeContext?: ActiveAccountContext): Promise<UnitSummary[]> {
+  const active = activeContext ?? (await requireActiveContext());
 
   return active.organization.units.map(({ id, name, code }) => ({ id, name, code }));
 }
@@ -165,7 +202,7 @@ export async function createStudent(payload: StudentPayload): Promise<Student> {
 
 export async function updateStudent(
   studentId: string,
-  payload: Partial<StudentPayload>
+  payload: StudentDetailsPayload
 ): Promise<Student> {
   const active = await requireActiveContext();
 
@@ -180,15 +217,35 @@ export async function updateStudent(
 }
 
 export async function inactivateStudent(studentId: string): Promise<Student> {
-  return updateStudent(studentId, { status: "INACTIVE" });
+  return executeStudentLifecycle(studentId, "inactivate");
 }
 
-export async function archiveStudent(studentId: string): Promise<Student> {
+export async function reactivateStudent(studentId: string): Promise<Student> {
+  return executeStudentLifecycle(studentId, "reactivate");
+}
+
+export async function replaceStudentUnits(studentId: string, unitIds: string[]): Promise<Student> {
   const active = await requireActiveContext();
 
   return apiRequest<Student>(
-    `/organizations/${active.organization.id}/students/${studentId}`,
-    { method: "DELETE" },
+    `/organizations/${active.organization.id}/students/${studentId}/units`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ unitIds })
+    },
+    { activeContext: active, includeUnitContext: false }
+  );
+}
+
+async function executeStudentLifecycle(
+  studentId: string,
+  action: "inactivate" | "reactivate"
+): Promise<Student> {
+  const active = await requireActiveContext();
+
+  return apiRequest<Student>(
+    `/organizations/${active.organization.id}/students/${studentId}/${action}`,
+    { method: "POST" },
     { activeContext: active, includeUnitContext: false }
   );
 }
@@ -232,7 +289,7 @@ async function apiRequest<T>(
     ...init,
     cache: "no-store",
     headers: {
-      "content-type": "application/json",
+      ...(init.body ? { "content-type": "application/json" } : {}),
       ...(await readAuthHeaders(config)),
       ...(options.activeContext?.unit && options.includeUnitContext !== false
         ? { "x-unit-id": options.activeContext.unit.id }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isIP } from "node:net";
 
 const optionalBooleanFromString = z
   .union([z.boolean(), z.string()])
@@ -35,6 +36,10 @@ export const apiEnvSchema = baseEnvSchema
     DIRECT_URL: z.string().min(1).optional(),
     REDIS_URL: redisUrlSchema.optional(),
     RATE_LIMIT_STORE: z.enum(["memory", "redis"]).optional(),
+    REDIS_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
+    REDIS_HEALTH_TIMEOUT_MS: z.coerce.number().int().min(100).max(10_000).default(1_000),
+    REDIS_MAX_RECONNECT_ATTEMPTS: z.coerce.number().int().min(0).max(20).default(3),
+    TRUSTED_PROXIES: z.string().default(""),
     CORS_ORIGINS: z.string().min(1).default("http://localhost:3000"),
     SWAGGER_ENABLED: optionalBooleanFromString,
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
@@ -82,6 +87,25 @@ export const apiEnvSchema = baseEnvSchema
         path: ["REDIS_URL"],
         message: "REDIS_URL is required when RATE_LIMIT_STORE=redis."
       });
+    }
+
+    for (const trustedProxy of parseTrustedProxies(env.TRUSTED_PROXIES)) {
+      if (isWildcardProxy(trustedProxy)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["TRUSTED_PROXIES"],
+          message: "Wildcard trusted proxies are not allowed."
+        });
+        continue;
+      }
+
+      if (!isValidIpOrCidr(trustedProxy)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["TRUSTED_PROXIES"],
+          message: `Invalid trusted proxy entry: ${trustedProxy}.`
+        });
+      }
     }
 
     if (env.AUTH_ADAPTER === "supabase-jwt") {
@@ -143,4 +167,33 @@ export function parseCorsOrigins(value: string): string[] {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+}
+
+export function parseTrustedProxies(value: string): string[] {
+  return value
+    .split(",")
+    .map((proxy) => proxy.trim())
+    .filter(Boolean);
+}
+
+function isWildcardProxy(value: string): boolean {
+  return ["*", "0.0.0.0/0", "::/0"].includes(value.toLowerCase());
+}
+
+function isValidIpOrCidr(value: string): boolean {
+  if (isIP(value) !== 0) {
+    return true;
+  }
+
+  const separatorIndex = value.lastIndexOf("/");
+  if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
+    return false;
+  }
+
+  const address = value.slice(0, separatorIndex);
+  const prefix = Number(value.slice(separatorIndex + 1));
+  const addressVersion = isIP(address);
+  const maxPrefix = addressVersion === 4 ? 32 : addressVersion === 6 ? 128 : -1;
+
+  return Number.isInteger(prefix) && prefix >= 0 && prefix <= maxPrefix;
 }

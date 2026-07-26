@@ -228,6 +228,7 @@ export class OnboardingRepository {
         ...currentPayload,
         review: { confirmAccuracy: input.confirmAccuracy }
       });
+      await this.assertResponsibleIdentity(tx, actorUserId, payload.responsible.email);
       const unit = await tx.unit.findFirst({
         where: { organizationId: scope.organizationId, deletedAt: null },
         orderBy: { createdAt: "asc" }
@@ -437,20 +438,28 @@ export class OnboardingRepository {
     }
 
     if (stepKey === "responsible" && "email" in stepPayload) {
-      const authenticatedUser = await tx.user.findFirst({
-        where: { id: actorUserId, deletedAt: null },
-        select: { email: true }
-      });
-      if (
-        !authenticatedUser ||
-        authenticatedUser.email.trim().toLowerCase() !== stepPayload.email.trim().toLowerCase()
-      ) {
-        throw new DomainError(
-          "O e-mail do responsavel deve ser o e-mail da identidade autenticada.",
-          "ONBOARDING_RESPONSIBLE_IDENTITY_MISMATCH",
-          400
-        );
-      }
+      await this.assertResponsibleIdentity(tx, actorUserId, stepPayload.email);
+    }
+  }
+
+  private async assertResponsibleIdentity(
+    tx: Prisma.TransactionClient,
+    actorUserId: string,
+    responsibleEmail: string
+  ): Promise<void> {
+    const authenticatedUser = await tx.user.findFirst({
+      where: { id: actorUserId, deletedAt: null },
+      select: { email: true }
+    });
+    if (
+      !authenticatedUser ||
+      authenticatedUser.email.trim().toLowerCase() !== responsibleEmail.trim().toLowerCase()
+    ) {
+      throw new DomainError(
+        "O e-mail do responsavel deve ser o e-mail da identidade autenticada.",
+        "ONBOARDING_RESPONSIBLE_IDENTITY_MISMATCH",
+        400
+      );
     }
   }
 

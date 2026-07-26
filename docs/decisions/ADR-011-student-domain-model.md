@@ -4,6 +4,10 @@
 
 Aceita.
 
+Emendada em 25 de julho de 2026 para separar dados, vínculos e ciclo de vida em endpoints
+dedicados. A emenda abaixo substitui qualquer referência anterior a `unitIds` ou status dentro do
+`PATCH Student` e retira o arquivamento do CRM V1.
+
 ## Contexto
 
 A Fase 1A inicia a primeira vertical funcional de gestao de alunos. O modelo anterior deixava pendente se aluno seria uma extensao direta de `User` ou uma pessoa de dominio separada.
@@ -29,24 +33,25 @@ presenca de `x-unit-id`:
 
 - leituras podem ser contextuais; com `unitId`, o aluno precisa possuir `StudentUnit` ativo para
   a unidade e somente esse vinculo e retornado;
-- criacao de `Student`, alteracao dos dados globais, alteracao de status, substituicao de vinculos
-  e arquivamento sao operacoes organizacionais e exigem grant cujo `MembershipRole.unitId` seja
+- criacao de `Student`, alteracao dos dados globais, alteracao de status e substituicao de vinculos
+  sao operacoes organizacionais e exigem grant cujo `MembershipRole.unitId` seja
   nulo;
 - um grant restrito a unidade nao se torna global quando a requisicao envia `x-unit-id` e nao
   autoriza criacao de novas unidades, mesmo contendo `unit:manage`;
 - enquanto nao houver casos de uso locais explicitos para `StudentUnit`, grants restritos a
   unidade podem consultar alunos do seu escopo, mas nao alterar o `Student` nem seus vinculos;
 - uma futura administracao local de vinculos deve possuir endpoints e regras proprias de
-  `StudentUnit`; `unitIds` em `PATCH Student` sempre representa substituicao organizacional real e
-  nunca sucesso sem mutacao.
+  `StudentUnit`; no CRM V1, `PUT /students/:studentId/units` representa substituicao
+  organizacional real e nunca sucesso sem mutacao.
 
 ### Ciclo de vida
 
-- inativar e alterar `Student.status` para `INACTIVE` por `PATCH`; `deletedAt` e os vinculos
-  permanecem inalterados, e o aluno continua pesquisavel pelo filtro `INACTIVE`;
-- arquivar e o soft delete explicito do `Student`; exige escopo organizacional, preenche
-  `Student.deletedAt`, encerra os `StudentUnit` ativos e remove o cadastro das consultas normais;
-- a interface deve nomear essas acoes separadamente e exigir confirmacao textual para arquivar.
+- `POST /students/:studentId/inactivate` altera `Student.status` para `INACTIVE`;
+- `POST /students/:studentId/reactivate` altera `Student.status` para `ACTIVE`;
+- ambas as operações são idempotentes, organizacionais, confirmadas na interface e auditadas;
+- `deletedAt` e os vínculos permanecem inalterados, e o aluno continua pesquisável pelo filtro
+  `INACTIVE`;
+- não existe endpoint ou ação de arquivamento/exclusão no CRM V1.
 
 O MVP armazena apenas:
 
@@ -56,8 +61,7 @@ O MVP armazena apenas:
 - telefone opcional;
 - data de nascimento opcional;
 - observacao operacional curta;
-- status `ACTIVE` ou `INACTIVE`;
-- soft delete.
+- status `ACTIVE` ou `INACTIVE`.
 
 Nao armazenar nesta etapa:
 

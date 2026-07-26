@@ -2,11 +2,15 @@
 
 ## Status
 
-Proposta detalhada aguardando aprovacao humana.
+Aceita e implementada no repositorio; validacao de staging pendente.
 
-Este ADR nao autoriza criar migrations, alterar o schema Prisma ou modificar o acesso a dados.
-A ativacao de RLS depende de aprovacao explicita deste desenho e de um plano de implementacao
-revisado.
+O spike conceitual foi concluido com 50/50 casos aprovados. As migrations, policies, helpers e a
+fronteira transacional reais ja existem no repositorio e possuem testes automatizados aprovados.
+Este estado nao autoriza producao externa: as identidades restritas do runtime, o catalogo final,
+o desempenho e a observabilidade ainda devem ser validados em staging.
+
+As secoes com linguagem de proposta registram o desenho original que orientou a implementacao.
+Quando houver diferenca temporal, este status e as secoes de rollout e gate ao final prevalecem.
 
 ## Contexto
 
@@ -46,7 +50,7 @@ a conexao.
 - receber o contexto efetivo de tenant diretamente de headers, formularios ou payloads;
 - implementar as politicas ou criar migrations nesta etapa.
 
-## Decisao proposta
+## Decisao implementada
 
 ### 1. Papeis de banco
 
@@ -79,10 +83,9 @@ O contexto efetivo sera representado por valores locais a transacao:
 - `app.unit_id`: unidade autorizada, ou ausente para escopo organizacional global;
 - `app.correlation_id`: identificador tecnico para auditoria e tracing.
 
-Os nomes sao parte da proposta; a implementacao ainda deve definir funcoes SQL auxiliares que
-leiam os valores com `current_setting(..., true)`, validem UUID e retornem `NULL` em caso ausente
-ou invalido. As politicas devem comparar com esses helpers e, portanto, negar acesso quando o
-contexto nao estiver completo.
+Os nomes foram implementados em funcoes SQL auxiliares que leem os valores com
+`current_setting(..., true)`, validam UUID e retornam `NULL` em caso ausente ou invalido. As
+policies comparam com esses helpers e negam acesso quando o contexto nao esta completo.
 
 O fluxo por request sera:
 
@@ -420,21 +423,26 @@ operacional ou criacao de um caminho de bypass global.
 - custo de pool e latencia que precisa ser medido;
 - policies passam a ser parte critica da autorizacao e do processo de migration.
 
-## Riscos em aberto para aprovacao
+## Estado dos riscos de aprovacao
 
-1. Provar a constraint trigger diferida de `Student`/`StudentUnit`; eventual troca pela operacao
-   atomica exige emenda e aprovacao.
-2. Validar que as policies de descoberta IAM nao possuem recursao ou canal lateral relevante.
-3. Definir isolamento e timeouts padrao por tipo de operacao Prisma.
-4. Definir SLO e limite aceitavel de regressao no pool e na latencia.
-5. Definir o mecanismo de identidade individual e elevacao temporaria para operacao.
-6. Definir como o provedor de backup comprova completude com RLS ativa.
+1. A constraint trigger diferida de `Student`/`StudentUnit` foi provada no spike conceitual.
+2. As policies de descoberta IAM passaram nos cenarios de recursao e isolamento automatizados.
+3. A fronteira transacional e seus timeouts estao implementados e cobertos localmente/CI.
+4. O SLO e o limite aceitavel de regressao no pool e na latencia continuam pendentes de benchmark
+   em staging.
+5. O mecanismo final de identidade individual e elevacao temporaria para operacao continua
+   pendente.
+6. A comprovacao de completude de backup e restore pelo provedor continua pendente.
 
 ## Gate de aprovacao
 
-Nenhuma migration de RLS deve ser criada antes de aprovacao humana deste ADR e dos seis riscos em
-aberto. A aprovacao deste documento ainda nao autoriza rollout em producao; cada grupo de tabelas
-tera gate separado.
+O gate de implementacao no repositorio foi concluido: o spike, as migrations reais e os testes
+automatizados existem e foram aprovados. O rollout em staging ainda exige roles restritas,
+consultas de catalogo, Redis gerenciado, observabilidade e benchmark representativo.
+
+Producao externa nao esta autorizada por este ADR. Qualquer mudanca futura de policy, grant, role
+ou funcao `SECURITY DEFINER` deve entrar em nova migration revisada; migrations aplicadas nao
+podem ser editadas.
 
 ## Referencias
 

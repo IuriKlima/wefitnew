@@ -111,7 +111,7 @@ protegida possui policies explicitas para SELECT, INSERT, UPDATE e DELETE, com `
 
 O grafo IAM e aciclico: `RolePermission -> Role -> MembershipRole -> Membership`. As policies de
 `Membership` nao consultam tabelas acima na cadeia. Isso evita recursao direta; a prova efetiva
-depende da execucao PostgreSQL pendente.
+foi concluida pela execucao PostgreSQL com 50/50 casos aprovados.
 
 ## SECURITY DEFINER
 
@@ -143,8 +143,8 @@ visivel, enfileirando a validacao diferida. Os casos incluem:
 - soft delete coordenado.
 
 O fluxo coordenado atualiza o Student para inativo/removido antes de encerrar o StudentUnit. A
-execucao pendente deve confirmar que essa ordem e suficiente sob concorrencia; falha bloqueia a
-trigger como decisao para o schema real.
+execucao confirmou que essa ordem e suficiente nos cenarios concorrentes do spike. O resultado
+continua sendo evidencia conceitual e nao substitui testes de staging sobre o schema real.
 
 ## Constraints e mensagens de erro
 
@@ -243,42 +243,44 @@ em schemas reais, pois a limpeza autorizada para esta tarefa remove somente o sc
 4. O dataset reduzido nao representa custo de policy em producao.
 5. O spike usou `SET LOCAL ROLE` e provou a robustez lógica local.
 
-## Recomendacao final
+## Conclusao do spike conceitual
 
-**APROVAR IMPLEMENTACAO CONCEITUAL, MAS CONTINUAR AGUARDANDO REVISAO.** Nao ativar RLS no schema real de imediato.
+O spike foi executado em PostgreSQL 17 e passou em 100% dos testes (50/50). Naquele momento, a
+recomendacao era aprovar o desenho conceitual sem autorizar imediatamente o rollout no schema real.
+Essa restricao historica foi tratada em etapas posteriores, com migrations e policies reais
+versionadas, testes automatizados e fronteira transacional implementada.
 
-O spike foi executado em PostgreSQL 17 e **passou em 100% dos testes (50/50)**. Defeitos teóricos nos scripts SQL foram corrigidos e validados no banco de dados.
+O estado atual nao elimina os gates de ambiente. Antes de producao publica ainda sao obrigatorios:
 
-Documentamos explicitamente que a aprovação deste spike **não substitui**:
+- teste com as identidades e DSNs restritas do runtime de staging;
+- benchmark de performance com dados representativos;
+- revisao de observabilidade sobre exporters e coletores reais;
+- validacao do Redis gerenciado;
+- aprovacao juridica e operacional.
 
-- O teste com DSNs reais separadas autenticando identidades distintas na rede;
-- O benchmark de performance em staging com dados volumosos;
-- A aplicação gradual e cautelosa das policies nas tabelas reais;
-- A revisão humana final de arquitetura e segurança.
-
-## Proximo passo recomendado
-
-Revisar o código do spike em Pull Request, validar o relatório final com arquitetura e segurança e, quando aprovado, iniciar a modelagem gradual das policies reais nos artefatos definitivos, com métricas de performance no staging. Nao criar migration RLS real neste Pull Request.
-
-## Revalidacao do Gate da fundacao — 2026-07-25
+## Registro historico superado — Revalidacao local do Gate da fundacao em 2026-07-25
 
 Esta tarefa nao criou migration nem alterou policy, grant, role ou funcao `SECURITY DEFINER`. As
 correcoes de retomada usam a policy existente de `OrganizationOnboarding` e o tenant ja resolvido
 pelo backend.
 
-O resultado historico de 50/50 permanece como evidencia da execucao anterior, mas nao foi
-reclassificado como execucao atual. Nesta estacao, o Docker Desktop nao iniciou, a porta
-PostgreSQL de teste `55432` permaneceu indisponivel e o Redis aceitou TCP sem responder a `PING`.
-Assim, `test:integration`, `test:rls-spike` e o teste Redis real ficaram bloqueados.
+Na execucao local especifica registrada abaixo, o Docker Desktop nao iniciou, a porta PostgreSQL
+de teste `55432` permaneceu indisponivel e o Redis aceitou TCP sem responder a `PING`. Por isso,
+naquele instante, `test:integration`, `test:rls-spike` e o teste Redis real ficaram bloqueados.
 
-| Risco                                           | Impacto                                           | Mitigacao                                                                    | Evidencia atual                                                 | Decisao necessaria                              | Bloqueia o gate?                                   |
-| ----------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------- |
-| Runtime de staging com privilegio elevado       | Bypass total de RLS                               | Validar `rolsuper`, `rolbypassrls`, ownership e memberships com a DSN real   | Testes locais restritos existem, mas nao rodaram nesta estacao  | Aprovacao de seguranca apos execucao em staging | Sim                                                |
-| Policies/grants divergirem do catalogo esperado | Acesso cruzado ou indisponibilidade               | Executar migrations e consultas de catalogo em PostgreSQL de teste e staging | Execucao atual bloqueada por Docker/PostgreSQL                  | Repetir suites de integracao e RLS              | Sim                                                |
-| Redis indisponivel em ambiente distribuido      | Negacao de servico; fallback poderia gerar bypass | Producao exige Redis e nao faz fallback para memoria                         | Configuracao e testes unitarios aprovados; teste real bloqueado | Validar Redis gerenciado/staging                | Sim                                                |
-| Mensagem de constraint em logs                  | Exposicao de metadados ou valores                 | Normalizar erros Prisma/PostgreSQL antes do log                              | Teste unitario garante que constraint e e-mail nao aparecem     | Revisar observabilidade em staging              | Nao, apos validacao estatica                       |
-| Custo de policies com volume real               | Regressao de latencia e pool                      | Benchmark com dados representativos e `pg_stat_statements`                   | Continua sem baseline de staging                                | Definir SLO e executar benchmark                | Sim para producao; nao para desenvolvimento do CRM |
+Esse bloqueio local foi posteriormente superado pelo CI #13 do commit
+`c5fdf35b558ac853cad5e18a04514dbffa4d8b53`. Os jobs `Quality and build`,
+`PostgreSQL, Redis and RLS` e `Production images` terminaram com sucesso. Portanto, esta secao nao
+representa o estado atual do gate e nao bloqueia o CRM de alunos V1.
 
-Recomendacao desta revalidacao: **o Gate da fundacao permanece condicionado**. O codigo pode seguir
-para revisao, mas o CRM de alunos nao deve iniciar ate PostgreSQL, Redis, RLS e isolamento serem
-reexecutados com sucesso no ambiente de teste e a postura do runtime ser validada em staging.
+| Risco                                           | Evidencia atual                                                           | Pendencia real                                      | Efeito no gate atual                                       |
+| ----------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
+| Runtime de staging com privilegio elevado       | Guardrails e testes locais/CI aprovados                                   | Validar roles e DSNs restritas em staging           | Bloqueia beta externo e producao publica                   |
+| Policies/grants divergirem do catalogo esperado | Migrations, integracao e spike aprovados no CI #13                        | Repetir consultas de catalogo no PostgreSQL staging | Nao bloqueia revisao do PR; bloqueia liberacao de ambiente |
+| Redis indisponivel em ambiente distribuido      | Redis real, concorrencia e TTL aprovados no CI #13                        | Validar Redis gerenciado e multiplas replicas       | Bloqueia beta externo e producao publica                   |
+| Mensagem de constraint em logs                  | Normalizacao e testes automatizados aprovados                             | Revisar exporters e coletores em staging            | Nao bloqueia revisao; condiciona operacao externa          |
+| Custo de policies com volume real               | Plano do spike aprovado somente com volume reduzido                       | Executar benchmark representativo e definir SLO     | Bloqueia producao publica                                  |
+| Termos e operacao                               | Fluxos tecnicos prontos; textos e processo de suporte ainda nao aprovados | Validacao juridica e operacional                    | Bloqueia abertura publica                                  |
+
+Recomendacao atual: o gate tecnico do branch esta aprovado para staging. O beta fechado depende
+das validacoes do ambiente, e a producao publica nao esta autorizada.

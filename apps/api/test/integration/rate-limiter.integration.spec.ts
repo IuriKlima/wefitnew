@@ -9,7 +9,8 @@ configureIntegrationTestEnv();
 
 describe("distributed Redis rate limiter integration", () => {
   const redisUrl = process.env.REDIS_URL!;
-  const limiter = new RedisRateLimiter(redisUrl);
+  const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
+  const limiter = new RedisRateLimiter(redis);
   const cleanup = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
   const keys = new Set<string>();
 
@@ -21,7 +22,7 @@ describe("distributed Redis rate limiter integration", () => {
     if (keys.size > 0) {
       await cleanup.del(...[...keys].map((key) => `wefit:rate-limit:${key}`));
     }
-    await limiter.onModuleDestroy();
+    await redis.quit();
     await cleanup.quit();
   });
 

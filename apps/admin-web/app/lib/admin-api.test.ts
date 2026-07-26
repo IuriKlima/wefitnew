@@ -3,7 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CurrentAccountContext } from "@gym-platform/contracts";
 
 import { readActiveContextSelection } from "./active-context";
-import { getOnboardingAvailability, listStudents, saveOnboardingStep } from "./admin-api";
+import {
+  getOnboardingAvailability,
+  inactivateStudent,
+  listStudents,
+  reactivateStudent,
+  replaceStudentUnits,
+  saveOnboardingStep,
+  updateStudent
+} from "./admin-api";
 import { createClient } from "./supabase/server";
 
 vi.mock("./supabase/server", () => ({
@@ -26,6 +34,13 @@ const accountContext: CurrentAccountContext = {
       type: "GYM",
       lifecycle: "ACTIVE",
       isGlobalMember: true,
+      permissions: {
+        organization: ["student:read", "student:manage"],
+        units: {
+          [unitId]: []
+        }
+      },
+      subscription: null,
       roles: [{ key: "owner", name: "Owner", scope: "ORGANIZATION" }],
       units: [{ id: unitId, name: "Unidade permitida", code: "MAIN", isAllowed: true }]
     }
@@ -47,7 +62,7 @@ afterEach(() => {
 });
 
 describe("admin API authentication and account context", () => {
-  it("uses only the Supabase token and membership-validated active context", async () => {
+  it("uses only the Supabase token and membership-validated global context", async () => {
     configureSupabaseEnv();
     vi.stubEnv("ADMIN_ORGANIZATION_ID", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     mockSupabaseSession("access-token");
@@ -67,10 +82,10 @@ describe("admin API authentication and account context", () => {
       `/organizations/${organizationId}/students`
     );
     expect(fetchMock.mock.calls[1]?.[1]?.headers).toMatchObject({
-      authorization: "Bearer access-token",
-      "x-unit-id": unitId
+      authorization: "Bearer access-token"
     });
     expect(fetchMock.mock.calls[1]?.[1]?.headers).not.toHaveProperty("x-dev-user-id");
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).not.toHaveProperty("x-unit-id");
   });
 
   it("fails before the context request when the Supabase session expired", async () => {
@@ -115,6 +130,61 @@ describe("admin API authentication and account context", () => {
     expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(
       JSON.stringify({ version: 4, selectedPlanCode: "GYM" })
     );
+  });
+
+  it("uses dedicated student lifecycle and unit endpoints without a unit write scope", async () => {
+    configureSupabaseEnv();
+    mockSupabaseSession("management-token");
+    vi.mocked(readActiveContextSelection).mockResolvedValue({ organizationId, unitId });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input.toString();
+      return new Response(JSON.stringify(url.endsWith("/me/context") ? accountContext : {}), {
+        status: 200
+      });
+    });
+
+    await updateStudent(unitId, { name: "Ana" });
+    await inactivateStudent(unitId);
+    await reactivateStudent(unitId);
+    await replaceStudentUnits(unitId, [unitId]);
+
+    const managementCalls = fetchMock.mock.calls.filter(
+      ([input]) => !input.toString().endsWith("/me/context")
+    );
+    expect(
+      managementCalls.map(([input, init]) => ({
+        url: input.toString(),
+        method: init?.method,
+        body: init?.body,
+        headers: init?.headers
+      }))
+    ).toEqual([
+      expect.objectContaining({
+        url: `http://api.example.test/organizations/${organizationId}/students/${unitId}`,
+        method: "PATCH",
+        body: JSON.stringify({ name: "Ana" })
+      }),
+      expect.objectContaining({
+        url: `http://api.example.test/organizations/${organizationId}/students/${unitId}/inactivate`,
+        method: "POST"
+      }),
+      expect.objectContaining({
+        url: `http://api.example.test/organizations/${organizationId}/students/${unitId}/reactivate`,
+        method: "POST"
+      }),
+      expect.objectContaining({
+        url: `http://api.example.test/organizations/${organizationId}/students/${unitId}/units`,
+        method: "PUT",
+        body: JSON.stringify({ unitIds: [unitId] })
+      })
+    ]);
+    for (const [, init] of managementCalls) {
+      expect(init?.headers).toMatchObject({ authorization: "Bearer management-token" });
+      expect(init?.headers).not.toHaveProperty("x-unit-id");
+    }
+    expect(managementCalls[0]?.[1]?.headers).toHaveProperty("content-type", "application/json");
+    expect(managementCalls[1]?.[1]?.headers).not.toHaveProperty("content-type");
+    expect(managementCalls[2]?.[1]?.headers).not.toHaveProperty("content-type");
   });
 });
 

@@ -8,13 +8,14 @@ export function configureUnitTestEnv(): void {
   process.env.CORS_ORIGINS ??= "http://localhost:3000";
   process.env.SWAGGER_ENABLED ??= "false";
   process.env.RATE_LIMIT_MAX ??= "1000";
-  process.env.RATE_LIMIT_STORE = "memory";
+  process.env.RATE_LIMIT_STORE ??= "memory";
   process.env.AUTH_ADAPTER ??= "temporary-header";
   process.env.ORGANIZATION_SELF_SERVICE_ENABLED ??= "false";
 }
 
 export function configureIntegrationTestEnv(): void {
   configureUnitTestEnv();
+  process.env.RATE_LIMIT_STORE = "redis";
   process.env.DATABASE_URL_TEST ??= defaultTestDatabaseUrl;
   process.env.DATABASE_URL = process.env.DATABASE_URL_TEST;
   process.env.ALLOW_TEST_DATABASE_RESET = "true";

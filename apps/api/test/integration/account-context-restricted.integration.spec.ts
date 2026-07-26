@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { CurrentAccountContext } from "@gym-platform/contracts";
 import { Prisma, type PrismaClient } from "@gym-platform/database";
+import { permissionKeys } from "@gym-platform/permissions";
 
 import {
   PrismaService,
@@ -93,6 +94,22 @@ describe("authenticated account context with a restricted PostgreSQL role", () =
       expect.objectContaining({
         id: organizationAId,
         isGlobalMember: true,
+        permissions: {
+          organization: [permissionKeys.studentManage, permissionKeys.studentRead],
+          units: {
+            [unitA1Id]: [],
+            [unitA2Id]: []
+          }
+        },
+        subscription: {
+          planCode: "NETWORK",
+          features: [
+            expect.objectContaining({
+              key: "students.manage",
+              enabled: true
+            })
+          ]
+        },
         units: [
           expect.objectContaining({ id: unitA1Id }),
           expect.objectContaining({ id: unitA2Id })
@@ -108,6 +125,12 @@ describe("authenticated account context with a restricted PostgreSQL role", () =
       expect.objectContaining({
         id: organizationAId,
         isGlobalMember: false,
+        permissions: {
+          organization: [],
+          units: {
+            [unitA1Id]: [permissionKeys.studentManage, permissionKeys.studentRead]
+          }
+        },
         units: [expect.objectContaining({ id: unitA1Id })],
         roles: [expect.objectContaining({ scope: "UNIT", unitId: unitA1Id })]
       })
@@ -171,7 +194,8 @@ describe("authenticated account context with a restricted PostgreSQL role", () =
       bypassesRls: false,
       ownsBusinessTables: 0,
       isContextConsumer: true,
-      isContextReader: false
+      isContextReader: false,
+      isRlsOwner: false
     });
   });
 
@@ -251,6 +275,7 @@ class RoleAssumingPrismaService extends PrismaService {
           ownsBusinessTables: number;
           isContextConsumer: boolean;
           isContextReader: boolean;
+          isRlsOwner: boolean;
         }>
       >`
         SELECT
@@ -271,7 +296,9 @@ class RoleAssumingPrismaService extends PrismaService {
           pg_catalog.pg_has_role(role.oid, 'wefit_context_consumer', 'MEMBER')
             AS "isContextConsumer",
           pg_catalog.pg_has_role(role.oid, 'wefit_context_reader', 'MEMBER')
-            AS "isContextReader"
+            AS "isContextReader",
+          pg_catalog.pg_has_role(role.oid, 'wefit_rls_owner', 'MEMBER')
+            AS "isRlsOwner"
         FROM pg_catalog.pg_roles AS role
         WHERE role.rolname = current_user
       `;
@@ -445,6 +472,57 @@ async function seedAccountContexts(prisma: PrismaClient): Promise<void> {
         name: "Proprietario"
       }
     ]
+  });
+
+  const permissionIds = await prisma.permission.findMany({
+    where: {
+      key: {
+        in: [permissionKeys.studentRead, permissionKeys.studentManage]
+      }
+    },
+    select: {
+      id: true
+    }
+  });
+  await prisma.rolePermission.createMany({
+    data: [roleAId, roleBId].flatMap((roleId) =>
+      permissionIds.map((permission) => ({
+        organizationId: roleId === roleAId ? organizationAId : organizationBId,
+        roleId,
+        permissionId: permission.id
+      }))
+    )
+  });
+
+  const plan = await prisma.subscriptionPlan.create({
+    data: {
+      code: "NETWORK",
+      name: "Network"
+    }
+  });
+  const studentsFeature = await prisma.feature.create({
+    data: {
+      key: "students.manage",
+      name: "Gestao de alunos"
+    }
+  });
+  await prisma.planFeature.create({
+    data: {
+      planId: plan.id,
+      featureId: studentsFeature.id,
+      enabled: true,
+      config: {
+        source: "account-context-test"
+      }
+    }
+  });
+  await prisma.organizationSubscription.create({
+    data: {
+      organizationId: organizationAId,
+      planId: plan.id,
+      status: "ACTIVE",
+      startsAt: new Date(Date.now() - 60_000)
+    }
   });
 
   const membershipInputs = [

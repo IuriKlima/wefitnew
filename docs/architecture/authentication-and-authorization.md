@@ -35,6 +35,11 @@ O admin web guarda a selecao ativa em cookies de servidor `HttpOnly`, mas sempre
 
 Rotas de negocio recebem `organizationId` pela rota e, quando aplicavel, `unitId` no contexto da requisicao. Ambas as informacoes devem ser validadas contra membership, papeis e permissoes do ator.
 
+No CRM de alunos, leituras aceitam o escopo contextual concedido. Criação, edição dos dados
+globais, troca de vínculos e mudança de status exigem `student:manage` em escopo organizacional e o
+entitlement `students.manage` quando há assinatura efetiva. Enviar um contexto de unidade nunca
+promove um grant local para organizacional.
+
 ## Separacao de privilegios no banco
 
 A leitura inicial de contexto usa uma funcao `SECURITY DEFINER` com `search_path` fixo. O papel proprietario da funcao tem `BYPASSRLS`, e o papel de runtime recebe somente `EXECUTE` por meio de um papel consumidor sem `BYPASSRLS`. O runtime da API nunca deve receber o papel proprietario nem privilegios amplos de leitura.
@@ -67,20 +72,32 @@ O limite global do Fastify e os limites sensiveis do onboarding usam Redis quand
 usam chaves separadas por ator e por IP, incremento atomico e TTL de um minuto, portanto multiplas
 replicas compartilham o mesmo estado.
 
+O endereço IP só é derivado de cabeçalhos encaminhados quando o proxy de origem está explicitamente
+configurado em `TRUSTED_PROXIES`. A configuração aceita IPs e CIDRs, rejeita entradas inválidas e
+proíbe wildcard em produção, evitando que o cliente escolha a identidade do bucket de rate limit.
+
 `RATE_LIMIT_STORE=memory` existe somente para desenvolvimento local e testes. Essa implementacao
 remove entradas expiradas e possui limite de chaves, mas nao e uma estrategia distribuida.
 
 Falha do Redis nao libera a requisicao por fallback em memoria; a operacao falha fechada para nao
 criar bypass entre replicas.
 
+## Saúde e disponibilidade
+
+- `GET /health` e `GET /health/live` são probes de liveness e não consultam dependências.
+- `GET /health/ready` consulta PostgreSQL e Redis; retorna indisponível se qualquer dependência
+  obrigatória falhar.
+- Falhas de dependência não incluem DSN, credenciais ou mensagens internas no payload público.
+
 ## Status atual
 
 - `GET /health` e `GET /health/live` sao publicos.
-- `GET /health/ready` e publico, mas valida PostgreSQL.
+- `GET /health/ready` é público e valida PostgreSQL e Redis.
 - `GET /me/context` exige autenticacao e limita o retorno ao ator atual.
 - `GET /onboarding/current` e as mutacoes do onboarding derivam o ator do JWT e nao aceitam IDs de tenant como autoridade.
 - O bootstrap cria usuario ausente, organizacao e unidade provisorias, membership owner, permissoes padrao e onboarding em uma unica transacao idempotente.
 - Cadastro e bootstrap self-service ficam desabilitados por padrao e nao podem ser habilitados em producao nesta versao.
 - Rotas de unidade exigem permissoes `unit:read` ou `unit:manage`.
-- Rotas de alunos exigem permissoes `student:read` ou `student:manage`.
+- Leituras de alunos exigem `student:read`; mutações exigem `student:manage`, escopo
+  organizacional e entitlement aplicável.
 - Logs de auditoria recebem `correlationId` quando disponivel.
